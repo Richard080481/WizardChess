@@ -16,10 +16,36 @@
 
 #include "Types.h"
 
+enum class EModelType
+{
+    ChessBoard = 0,
+    ChessPiece = 1,
+};
+
+enum class ERenderMode : int
+{
+    Color   = 0,
+    Texture = 1
+};
+
+struct ModelPushConstants
+{
+    struct ModelVsPushConstants
+    {
+        glm::mat4 model;
+        glm::mat4 normailzeMatrix;
+    } vs;
+
+    struct ModelFsPushConstants
+    {
+        ERenderMode renderMode;
+    } fs;
+};
+
 class Model
 {
 public:
-    Model(std::string fileName)
+    Model(std::string fileName, EModelType type) : m_type(type)
     {
         Load(fileName);
     }
@@ -48,6 +74,11 @@ public:
         return m_indexBuffer;
     }
 
+    void Scale(glm::vec3 scale)
+    {
+        m_modelMatrix = glm::scale(m_modelMatrix, scale);
+    }
+
     void Translate(glm::vec3 tranlation)
     {
         m_modelMatrix = glm::translate(m_modelMatrix, tranlation);
@@ -71,10 +102,32 @@ public:
                         (m_boundaries[5] - m_boundaries[4])) / 2;
     }
 
+    ERenderMode RenderMode()
+    {
+        ERenderMode renderMode = ERenderMode::Color;
+
+        switch (m_type)
+        {
+            case EModelType::ChessPiece:
+                renderMode = ERenderMode::Color;
+                break;
+            case EModelType::ChessBoard:
+                renderMode = ERenderMode::Texture;
+                break;
+            default:
+                assert(false);
+                break;
+        }
+
+        return renderMode;
+    }
+
 private:
     void CreateIndexBuffer();
     void CreateVertexBuffer();
     void Load(std::string fileName);
+
+    EModelType m_type;
 
     glm::mat4               m_modelMatrix = glm::mat4(1.0f);
     std::vector<Vertex>     m_vertices;

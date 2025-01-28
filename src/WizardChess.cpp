@@ -490,17 +490,20 @@ void WizzardChess::CreateGraphicsPipeline()
     dynamicState.dynamicStateCount  = static_cast<uint32_t>(dynamicStates.size());
     dynamicState.pDynamicStates     = dynamicStates.data();
 
-    VkPushConstantRange pushConstantRange{};
-    pushConstantRange.offset        = 0;
-    pushConstantRange.size          = sizeof(ModelPushConstants);
-    pushConstantRange.stageFlags    = VK_SHADER_STAGE_VERTEX_BIT;
+    std::vector<VkPushConstantRange> pushConstantRange(2);
+    pushConstantRange[0].offset        = offsetof(ModelPushConstants, vs);
+    pushConstantRange[0].size          = sizeof(ModelPushConstants::ModelVsPushConstants);
+    pushConstantRange[0].stageFlags    = VK_SHADER_STAGE_VERTEX_BIT;
+    pushConstantRange[1].offset        = offsetof(ModelPushConstants, fs);
+    pushConstantRange[1].size          = sizeof(ModelPushConstants::ModelFsPushConstants);
+    pushConstantRange[1].stageFlags    = VK_SHADER_STAGE_FRAGMENT_BIT;
 
     VkPipelineLayoutCreateInfo pipelineLayoutInfo{};
     pipelineLayoutInfo.sType                    = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
     pipelineLayoutInfo.setLayoutCount           = 1;
     pipelineLayoutInfo.pSetLayouts              = &m_descriptorSetLayout;
-    pipelineLayoutInfo.pushConstantRangeCount   = 1;
-    pipelineLayoutInfo.pPushConstantRanges      = &pushConstantRange;
+    pipelineLayoutInfo.pushConstantRangeCount   = static_cast<uint32_t>(pushConstantRange.size());
+    pipelineLayoutInfo.pPushConstantRanges      = pushConstantRange.data();
 
     if (vkCreatePipelineLayout(VK.Device(), &pipelineLayoutInfo, nullptr, &m_pipelineLayout) != VK_SUCCESS)
     {
@@ -768,30 +771,48 @@ void WizzardChess::TransitionImageLayout(VkImage image, VkFormat format, VkImage
 
 void WizzardChess::LoadModel()
 {
-    constexpr EModel firstModelIndex = EModel::Cube;
-    constexpr EModel lastModelIndex  = EModel::Cube;
-    constexpr int    numModels       = lastModelIndex - firstModelIndex + 1;
-    constexpr float  x_offset        = 0.0f;
-    constexpr float  theta           = 360.0f / numModels;
-    float            maxScale        = 0.0f;
-    for (int i = firstModelIndex; i <= lastModelIndex; i++)
+    // Load pieces
     {
-        Model* pModel = new Model(GetModelPaths(static_cast<EModel>(i)));
+        constexpr EModel firstModelIndex = EModel::Bishop;
+        constexpr EModel lastModelIndex  = EModel::Queen;
+        constexpr int    numModels       = lastModelIndex - firstModelIndex + 1;
+        constexpr float  x_offset        = 1.2f;
+        constexpr float  theta           = 360.0f / numModels;
+        float            maxScale        = 0.0f;
+        for (int i = firstModelIndex; i <= lastModelIndex; i++)
+        {
+            Model* pModel = new Model(GetModelPaths(static_cast<EModel>(i)), EModelType::ChessPiece);
 
-        pModel->Rotate(theta * i, glm::vec3(0.0f, 1.0f, 0.0f));
-        pModel->Translate(glm::vec3(x_offset, 0.0f, 0.0f));
+            pModel->Rotate(theta * i, glm::vec3(0.0f, 1.0f, 0.0f));
+            pModel->Translate(glm::vec3(x_offset, 0.0f, 0.0f));
+
+            pModel->Translate(glm::vec3(0.0f, 1.0f, 0.0f));
+
+            ///@note Originally the model was along z-axis.
+            ///      Rotate -90 degree along x-axis to make it point to the y-axis.
+            pModel->Rotate(-90.0f, glm::vec3(1.0f, 0.0f, 0.0f));
+
+            maxScale = std::max(maxScale, pModel->MaxScale());
+            m_models.push_back(pModel);
+        }
+
+        for (auto& pModel : m_models)
+        {
+            pModel->RescaleNormalizeMatrix(1.0f / maxScale);
+        }
+    }
+
+    // Load board
+    {
+        Model* pModel = new Model(GetModelPaths(EModel::Cube), EModelType::ChessBoard);
+
+        pModel->Scale(glm::vec3(5.0f, 0.0f, 5.0f));
 
         ///@note Originally the model was along z-axis.
         ///      Rotate -90 degree along x-axis to make it point to the y-axis.
         pModel->Rotate(-90.0f, glm::vec3(1.0f, 0.0f, 0.0f));
 
-        maxScale = std::max(maxScale, pModel->MaxScale());
         m_models.push_back(pModel);
-    }
-
-    for (auto& pModel : m_models)
-    {
-        pModel->RescaleNormalizeMatrix(1.0f / maxScale);
     }
 }
 
@@ -941,15 +962,16 @@ void WizzardChess::RecordCommandBuffer(VkCommandBuffer commandBuffer, uint32_t i
     float time = std::chrono::duration<float, std::chrono::seconds::period>(currentTime - startTime).count();
 
     // Create push constants for passing small amounts of dynamic data to shaders.
-    ModelPushConstants constants{};
+    ModelPushConstants pushConstants{};
 
     // Render each model in the scene.
     for (auto& model : m_models)
     {
-        // Initialize the model matrix and apply dynamic rotation.
-        constants.model = glm::mat4(1.0);
-        constants.model = glm::rotate(constants.model, time * glm::radians(90.0f), glm::vec3(2.0f, 3.0f, 5.0f));
-        constants.model = constants.model * model->ModelMatrix();
+        // Populate the push constants.
+        pushConstants.vs.model = glm::mat4(1.0);
+        pushConstants.vs.model = glm::rotate(pushConstants.vs.model, time * glm::radians(10.0f), glm::vec3(0.0f, 1.0f, 0.0f));
+        pushConstants.vs.model = pushConstants.vs.model * model->ModelMatrix();
+        pushConstants.fs.renderMode = model->RenderMode();
 
         // Bind the vertex buffer for the current model.
         VkBuffer vertexBuffers[] = { model->VertexBuffer() };
@@ -959,9 +981,12 @@ void WizzardChess::RecordCommandBuffer(VkCommandBuffer commandBuffer, uint32_t i
         // Bind the index buffer for the current model.
         vkCmdBindIndexBuffer(commandBuffer, model->IndexBuffer(), 0, VK_INDEX_TYPE_UINT32);
 
-        // Pass the normalization matrix to the shaders.
-        constants.normailzeMatrix = model->NormalizeMatrix();
-        vkCmdPushConstants(commandBuffer, m_pipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(ModelPushConstants), &constants);
+        // Pass the VS push constant to the vertex shader.
+        pushConstants.vs.normailzeMatrix = model->NormalizeMatrix();
+        vkCmdPushConstants(commandBuffer, m_pipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, offsetof(ModelPushConstants, vs), sizeof(ModelPushConstants::ModelVsPushConstants), &pushConstants.vs);
+
+        // Pass the FS push constant to the fragment shader.
+        vkCmdPushConstants(commandBuffer, m_pipelineLayout, VK_SHADER_STAGE_FRAGMENT_BIT, offsetof(ModelPushConstants, fs), sizeof(ModelPushConstants::ModelFsPushConstants), &pushConstants.fs);
 
         // Issue a draw command for the indexed geometry of the model.
         vkCmdDrawIndexed(commandBuffer, static_cast<uint32_t>(model->Indices()), 1, 0, 0, 0);
@@ -1006,10 +1031,10 @@ void WizzardChess::UpdateUniformBuffer(uint32_t currentImage, int modelIndex)
     auto swapChainExtent = VK.SurfaceManager()->SwapChainExtent();
 
     UniformBufferObject ubo{};
-    ubo.view = glm::lookAt(glm::vec3(0.0f, 1.0f, 5.0f),
+    ubo.view = glm::lookAt(glm::vec3(0.0f, 8.0f, 10.0f),
                            glm::vec3(0.0f, -0.5f, 0.0f),
                            glm::vec3(0.0f, 1.0f, 0.0f));
-    ubo.proj = glm::perspective(glm::radians(45.0f), swapChainExtent.width / (float)swapChainExtent.height, 0.1f, 10.0f);
+    ubo.proj = glm::perspective(glm::radians(45.0f), swapChainExtent.width / (float)swapChainExtent.height, 0.1f, 20.0f);
 
     // Vulkan's y-axis is pointing downwards.
     ubo.proj[1][1] *= -1;

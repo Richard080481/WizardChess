@@ -13,11 +13,14 @@ layout(location = 2) in vec2 inTexCoord;
 layout(location = 0) out vec3 fragColor;
 layout(location = 1) out vec2 fragTexCoord;
 
-//push constants block
-layout( push_constant ) uniform constants
+layout(push_constant) uniform constants
 {
-    mat4 model;
-	mat4 normailzeMatrix;
+    // vs
+    layout(offset = 0)  mat4 model;
+    layout(offset = 64) mat4 normailzeMatrix;
+
+    ///@note fs
+    ///      layout(offset = 128) int renderMode;
 } pushConstant;
 
 void main()

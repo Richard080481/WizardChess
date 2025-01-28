@@ -56,19 +56,19 @@ private:
 
     std::vector<VkFramebuffer> m_swapChainFramebuffers;
 
-    VkRenderPass            m_renderPass = VK_NULL_HANDLE;
-    VkDescriptorSetLayout   m_descriptorSetLayout;
-    VkPipelineLayout        m_pipelineLayout;
-    VkPipeline              m_graphicsPipeline;
+    VkRenderPass            m_renderPass           = VK_NULL_HANDLE;
+    VkDescriptorSetLayout   m_descriptorSetLayout  = VK_NULL_HANDLE;
+    VkPipelineLayout        m_pipelineLayout       = VK_NULL_HANDLE;
+    VkPipeline              m_graphicsPipeline     = VK_NULL_HANDLE;
 
-    VkImage                 m_depthImage;
-    VkDeviceMemory          m_depthImageMemory;
-    VkImageView             m_depthImageView;
+    VkImage                 m_depthImage           = VK_NULL_HANDLE;
+    VkDeviceMemory          m_depthImageMemory     = VK_NULL_HANDLE;
+    VkImageView             m_depthImageView       = VK_NULL_HANDLE;
 
-    VkImage                 m_textureImage;
-    VkDeviceMemory          m_textureImageMemory;
-    VkImageView             m_textureImageView;
-    VkSampler               m_textureSampler;
+    VkImage                 m_textureImage         = VK_NULL_HANDLE;
+    VkDeviceMemory          m_textureImageMemory   = VK_NULL_HANDLE;
+    VkImageView             m_textureImageView     = VK_NULL_HANDLE;
+    VkSampler               m_textureSampler       = VK_NULL_HANDLE;
 
     std::vector<Model*>     m_models;
 
@@ -76,7 +76,7 @@ private:
     std::vector<VkDeviceMemory> m_uniformBuffersMemory;
     std::vector<void*>          m_uniformBuffersMapped;
 
-    VkDescriptorPool             m_descriptorPool;
+    VkDescriptorPool             m_descriptorPool = VK_NULL_HANDLE;
     std::vector<VkDescriptorSet> m_descriptorSets;
 
     std::vector<VkCommandBuffer> m_commandBuffers;

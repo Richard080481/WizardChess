@@ -57,10 +57,4 @@ struct Vertex
     }
 };
 
-struct ModelPushConstants
-{
-    glm::mat4 model;
-    glm::mat4 normailzeMatrix;
-};
-
 #endif // __TYPES_H__

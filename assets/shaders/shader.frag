@@ -7,8 +7,24 @@ layout(location = 1) in vec2 fragTexCoord;
 
 layout(location = 0) out vec4 outColor;
 
+layout(push_constant) uniform constants
+{
+    ///@note vs
+    ///      layout(offset = 0)  mat4 model;
+    ///      layout(offset = 64) mat4 normailzeMatrix;
+
+    // fs
+    layout(offset = 128) int renderMode;
+} pushConstant;
+
 void main()
 {
-    outColor = texture(texSampler, fragTexCoord);
-    //outColor = vec4(fragColor, 1.0);
+    if (pushConstant.renderMode == 0)
+    {
+        outColor = vec4(fragColor, 1.0);
+    }
+    else if (pushConstant.renderMode == 1)
+    {
+        outColor = texture(texSampler, fragTexCoord);
+    }
 }
