@@ -84,9 +84,13 @@ private:
 
     std::unordered_map<EModelName, Model*>  m_uniqueModels;
 
-    std::vector<VkBuffer>       m_uniformBuffers;
-    std::vector<VkDeviceMemory> m_uniformBuffersMemory;
-    std::vector<void*>          m_uniformBuffersMapped;
+    std::vector<VkBuffer>       m_vsUniformBuffers;
+    std::vector<VkDeviceMemory> m_vsUniformBuffersMemory;
+    std::vector<void*>          m_vsUniformBuffersMapped;
+
+    std::vector<VkBuffer>       m_fsUniformBuffers;
+    std::vector<VkDeviceMemory> m_fsUniformBuffersMemory;
+    std::vector<void*>          m_fsUniformBuffersMapped;
 
     VkDescriptorPool             m_descriptorPool = VK_NULL_HANDLE;
     std::vector<VkDescriptorSet> m_descriptorSets;

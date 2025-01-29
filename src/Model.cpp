@@ -18,6 +18,40 @@ Model::~Model()
     vkFreeMemory(VK.Device(), m_vertexBufferMemory, nullptr);
 }
 
+void ComputeSmoothNormals(const std::vector<uint32_t>& indices, std::vector<Vertex>& vertices)
+{
+    // Initialize all normals to zero
+    for (auto& vertex : vertices)
+    {
+        vertex.normal = glm::vec3(0.0f);
+    }
+
+    // Accumulate face normals
+    for (size_t i = 0; i < indices.size(); i += 3)
+    {
+        uint32_t i0 = indices[i];
+        uint32_t i1 = indices[i + 1];
+        uint32_t i2 = indices[i + 2];
+
+        glm::vec3 v0 = vertices[i0].pos;
+        glm::vec3 v1 = vertices[i1].pos;
+        glm::vec3 v2 = vertices[i2].pos;
+
+        glm::vec3 normal = glm::normalize(glm::cross(v1 - v0, v2 - v0));
+
+        // Add to vertex normals
+        vertices[i0].normal += normal;
+        vertices[i1].normal += normal;
+        vertices[i2].normal += normal;
+    }
+
+    // Normalize each normal
+    for (auto& vertex : vertices)
+    {
+        vertex.normal = glm::normalize(vertex.normal);
+    }
+}
+
 void Model::Load(std::string fileNmae)
 {
     tinyobj::attrib_t attrib;
@@ -37,11 +71,24 @@ void Model::Load(std::string fileNmae)
     m_boundaries[4] = attrib.vertices[2];
     m_boundaries[5] = attrib.vertices[2];
 
+#define USE_POSITION_AS_COLOR 0
+
     for (const auto& shape : shapes)
     {
         for (const auto& index : shape.mesh.indices)
         {
             Vertex vertex{};
+
+#if USE_POSITION_AS_COLOR
+            vertex.color = { vertex.pos[0], vertex.pos[1], vertex.pos[2] };
+#else
+            vertex.color =
+            {
+                attrib.colors[3 * index.vertex_index + 0],
+                attrib.colors[3 * index.vertex_index + 1],
+                attrib.colors[3 * index.vertex_index + 2]
+            };
+#endif // USE_POSITION_AS_COLOR
 
             vertex.pos =
             {
@@ -66,12 +113,12 @@ void Model::Load(std::string fileNmae)
                 };
             }
 
-            vertex.color = { vertex.pos[0], vertex.pos[1], vertex.pos[2] };
-
             m_indices.push_back(m_vertices.size());
             m_vertices.push_back(vertex);
         }
     }
+
+    ComputeSmoothNormals(m_indices, m_vertices);
 
     float maxLength = std::max(std::max((m_boundaries[1] - m_boundaries[0]) / 2,
                                         (m_boundaries[3] - m_boundaries[2]) / 2),
@@ -83,12 +130,14 @@ void Model::Load(std::string fileNmae)
                                                   (m_boundaries[2] + m_boundaries[3]) / 2,
                                                   (m_boundaries[4] + m_boundaries[5]) / 2));
 
+#if USE_POSITION_AS_COLOR
     for (auto& vertex : m_vertices)
     {
         vertex.color[0] = (vertex.color[0] - m_boundaries[0]) / (m_boundaries[1] - m_boundaries[0]);
         vertex.color[1] = (vertex.color[1] - m_boundaries[2]) / (m_boundaries[3] - m_boundaries[2]);
         vertex.color[2] = (vertex.color[2] - m_boundaries[4]) / (m_boundaries[5] - m_boundaries[4]);
     }
+#endif // USE_POSITION_AS_COLOR
 }
 
 void Model::CreateVertexBuffer()
