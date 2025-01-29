@@ -122,7 +122,7 @@ const std::vector<const char*> g_validationLayers =
     "VK_LAYER_KHRONOS_validation"
 };
 
-WizzardChess::~WizzardChess()
+WizardChess::~WizardChess()
 {
     delete g_pVk;
     g_pVk = nullptr;
@@ -131,7 +131,7 @@ WizzardChess::~WizzardChess()
     g_pMemoryTracker = nullptr;
 }
 
-void WizzardChess::run()
+void WizardChess::run()
 {
     InitVulkan();
     MainLoop();
@@ -140,11 +140,11 @@ void WizzardChess::run()
 
 static void framebufferResizeCallback(GLFWwindow* window, int width, int height)
 {
-    auto app = reinterpret_cast<WizzardChess*>(glfwGetWindowUserPointer(window));
+    auto app = reinterpret_cast<WizardChess*>(glfwGetWindowUserPointer(window));
     app->SetFramebufferResized();
 }
 
-void WizzardChess::InitVulkan()
+void WizardChess::InitVulkan()
 {
     // Create a VulkanDeviceManager object to manage Vulkan-specific operations.
     g_pVk = new VulkanDeviceManager();
@@ -225,7 +225,7 @@ void WizzardChess::InitVulkan()
 }
 
 
-void WizzardChess::MainLoop()
+void WizardChess::MainLoop()
 {
     while (!glfwWindowShouldClose(VK.SurfaceManager()->Window()))
     {
@@ -236,7 +236,7 @@ void WizzardChess::MainLoop()
     vkDeviceWaitIdle(VK.Device());
 }
 
-void WizzardChess::CleanupSwapChain()
+void WizardChess::CleanupSwapChain()
 {
     VkDevice device = VK.Device();
     vkDestroyImageView(device, m_depthImageView, nullptr);
@@ -257,7 +257,7 @@ void WizzardChess::CleanupSwapChain()
     VK.SurfaceManager()->DestroySwapChain();
 }
 
-void WizzardChess::Cleanup()
+void WizardChess::Cleanup()
 {
     CleanupSwapChain();
 
@@ -297,7 +297,7 @@ void WizzardChess::Cleanup()
     }
 }
 
-void WizzardChess::RecreateSwapChain()
+void WizardChess::RecreateSwapChain()
 {
     int width = 0, height = 0;
     VK.SurfaceManager()->GetGlfwFrameBufferSize(&width, &height);
@@ -311,7 +311,7 @@ void WizzardChess::RecreateSwapChain()
     CreateFramebuffers();
 }
 
-void WizzardChess::CreateRenderPass()
+void WizardChess::CreateRenderPass()
 {
     VkAttachmentDescription colorAttachment{};
     colorAttachment.format          = VK.SurfaceManager()->SwapChainImageFormat();
@@ -371,7 +371,7 @@ void WizzardChess::CreateRenderPass()
     }
 }
 
-void WizzardChess::CreateDescriptorSetLayout()
+void WizardChess::CreateDescriptorSetLayout()
 {
     VkDescriptorSetLayoutBinding uboLayoutBinding{};
     uboLayoutBinding.binding                = 0;
@@ -399,7 +399,7 @@ void WizzardChess::CreateDescriptorSetLayout()
     }
 }
 
-void WizzardChess::CreateGraphicsPipeline()
+void WizardChess::CreateGraphicsPipeline()
 {
     auto vertShaderCode = ReadFile(GetShaderPaths(EShader::Vert));
     auto fragShaderCode = ReadFile(GetShaderPaths(EShader::Frag));
@@ -536,7 +536,7 @@ void WizzardChess::CreateGraphicsPipeline()
     vkDestroyShaderModule(VK.Device(), vertShaderModule, nullptr);
 }
 
-void WizzardChess::CreateFramebuffers()
+void WizardChess::CreateFramebuffers()
 {
     auto swapChainImageViews = VK.SurfaceManager()->SwapChainImageViews();
 
@@ -568,7 +568,7 @@ void WizzardChess::CreateFramebuffers()
     }
 }
 
-void WizzardChess::CreateDepthResources()
+void WizardChess::CreateDepthResources()
 {
     VkFormat depthFormat = FindDepthFormat();
 
@@ -577,7 +577,7 @@ void WizzardChess::CreateDepthResources()
     m_depthImageView = VK.CreateImageView(m_depthImage, depthFormat, VK_IMAGE_ASPECT_DEPTH_BIT);
 }
 
-VkFormat WizzardChess::FindSupportedFormat(const std::vector<VkFormat>& candidates, VkImageTiling tiling, VkFormatFeatureFlags features)
+VkFormat WizardChess::FindSupportedFormat(const std::vector<VkFormat>& candidates, VkImageTiling tiling, VkFormatFeatureFlags features)
 {
     for (VkFormat format : candidates)
     {
@@ -597,7 +597,7 @@ VkFormat WizzardChess::FindSupportedFormat(const std::vector<VkFormat>& candidat
     throw std::runtime_error("failed to find supported format!");
 }
 
-VkFormat WizzardChess::FindDepthFormat()
+VkFormat WizardChess::FindDepthFormat()
 {
     return FindSupportedFormat(
         { VK_FORMAT_D32_SFLOAT, VK_FORMAT_D32_SFLOAT_S8_UINT, VK_FORMAT_D24_UNORM_S8_UINT },
@@ -606,12 +606,12 @@ VkFormat WizzardChess::FindDepthFormat()
     );
 }
 
-bool WizzardChess::HasStencilComponent(VkFormat format)
+bool WizardChess::HasStencilComponent(VkFormat format)
 {
     return format == VK_FORMAT_D32_SFLOAT_S8_UINT || format == VK_FORMAT_D24_UNORM_S8_UINT;
 }
 
-void WizzardChess::CreateTextureImage()
+void WizardChess::CreateTextureImage()
 {
     int texWidth, texHeight, texChannels;
     stbi_uc* pixels = stbi_load(GetTexturePaths(ETexture::ChessBoardWood).c_str(), &texWidth, &texHeight, &texChannels, STBI_rgb_alpha);
@@ -645,12 +645,12 @@ void WizzardChess::CreateTextureImage()
     vkFreeMemory(device, stagingBufferMemory, nullptr);
 }
 
-void WizzardChess::CreateTextureImageView()
+void WizardChess::CreateTextureImageView()
 {
     m_textureImageView = VK.CreateImageView(m_textureImage, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_ASPECT_COLOR_BIT);
 }
 
-void WizzardChess::CreateTextureSampler()
+void WizardChess::CreateTextureSampler()
 {
     VkPhysicalDeviceProperties properties{};
     vkGetPhysicalDeviceProperties(VK.PhysicalDevice(), &properties);
@@ -676,7 +676,7 @@ void WizzardChess::CreateTextureSampler()
     }
 }
 
-void WizzardChess::CreateImage(uint32_t width, uint32_t height, VkFormat format, VkImageTiling tiling, VkImageUsageFlags usage, VkMemoryPropertyFlags properties, VkImage& image, VkDeviceMemory& imageMemory)
+void WizardChess::CreateImage(uint32_t width, uint32_t height, VkFormat format, VkImageTiling tiling, VkImageUsageFlags usage, VkMemoryPropertyFlags properties, VkImage& image, VkDeviceMemory& imageMemory)
 {
     VkImageCreateInfo imageInfo{};
     imageInfo.sType         = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
@@ -716,7 +716,7 @@ void WizzardChess::CreateImage(uint32_t width, uint32_t height, VkFormat format,
     vkBindImageMemory(device, image, imageMemory, 0);
 }
 
-void WizzardChess::TransitionImageLayout(VkImage image, VkFormat format, VkImageLayout oldLayout, VkImageLayout newLayout)
+void WizardChess::TransitionImageLayout(VkImage image, VkFormat format, VkImageLayout oldLayout, VkImageLayout newLayout)
 {
     VkCommandBuffer commandBuffer = VK.BeginSingleTimeCommands();
 
@@ -769,7 +769,7 @@ void WizzardChess::TransitionImageLayout(VkImage image, VkFormat format, VkImage
     VK.EndSingleTimeCommands(commandBuffer);
 }
 
-void WizzardChess::LoadModel()
+void WizardChess::LoadModel()
 {
     // Load pieces
     {
@@ -816,7 +816,7 @@ void WizzardChess::LoadModel()
     }
 }
 
-void WizzardChess::CreateUniformBuffers()
+void WizardChess::CreateUniformBuffers()
 {
     VkDeviceSize bufferSize = sizeof(UniformBufferObject);
 
@@ -832,7 +832,7 @@ void WizzardChess::CreateUniformBuffers()
     }
 }
 
-void WizzardChess::CreateDescriptorPool()
+void WizardChess::CreateDescriptorPool()
 {
     std::array<VkDescriptorPoolSize, 2> poolSizes{};
     poolSizes[0].type            = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
@@ -852,7 +852,7 @@ void WizzardChess::CreateDescriptorPool()
     }
 }
 
-void WizzardChess::CreateDescriptorSets()
+void WizardChess::CreateDescriptorSets()
 {
     std::vector<VkDescriptorSetLayout> layouts(MAX_FRAMES_IN_FLIGHT, m_descriptorSetLayout);
     VkDescriptorSetAllocateInfo allocInfo{};
@@ -901,7 +901,7 @@ void WizzardChess::CreateDescriptorSets()
     }
 }
 
-void WizzardChess::RecordCommandBuffer(VkCommandBuffer commandBuffer, uint32_t imageIndex)
+void WizardChess::RecordCommandBuffer(VkCommandBuffer commandBuffer, uint32_t imageIndex)
 {
     // Begin recording commands into the command buffer.
     VkCommandBufferBeginInfo beginInfo{};
@@ -1002,7 +1002,7 @@ void WizzardChess::RecordCommandBuffer(VkCommandBuffer commandBuffer, uint32_t i
     }
 }
 
-void WizzardChess::CreateSyncObjects()
+void WizardChess::CreateSyncObjects()
 {
     m_imageAvailableSemaphores.resize(MAX_FRAMES_IN_FLIGHT);
     m_renderFinishedSemaphores.resize(MAX_FRAMES_IN_FLIGHT);
@@ -1026,7 +1026,7 @@ void WizzardChess::CreateSyncObjects()
     }
 }
 
-void WizzardChess::UpdateUniformBuffer(uint32_t currentImage, int modelIndex)
+void WizardChess::UpdateUniformBuffer(uint32_t currentImage, int modelIndex)
 {
     auto swapChainExtent = VK.SurfaceManager()->SwapChainExtent();
 
@@ -1042,7 +1042,7 @@ void WizzardChess::UpdateUniformBuffer(uint32_t currentImage, int modelIndex)
     memcpy(m_uniformBuffersMapped[currentImage], &ubo, sizeof(ubo));
 }
 
-void WizzardChess::DrawFrame()
+void WizardChess::DrawFrame()
 {
     vkWaitForFences(VK.Device(), 1, &m_inFlightFences[m_currentFrame], VK_TRUE, UINT64_MAX);
 

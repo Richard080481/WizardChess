@@ -1,5 +1,5 @@
-#ifndef __WIZZARD_CHESS_H__
-#define __WIZZARD_CHESS_H__
+#ifndef __WIZARD_CHESS_H__
+#define __WIZARD_CHESS_H__
 
 #define GLFW_INCLUDE_VULKAN
 #include <GLFW/glfw3.h>
@@ -12,10 +12,10 @@
 #include "VulkanSurfaceManager.h"
 #include "MemoryTracker.h"
 
-class WizzardChess {
+class WizardChess {
 public:
-    WizzardChess(int width, int height) : m_width(width), m_height(height) {}
-    ~WizzardChess();
+    WizardChess(int width, int height) : m_width(width), m_height(height) {}
+    ~WizardChess();
 
     void run();
     void SetFramebufferResized()
@@ -89,4 +89,4 @@ private:
     bool m_framebufferResized = false;
 };
 
-#endif // __WIZZARD_CHESS_H__
+#endif // __WIZARD_CHESS_H__

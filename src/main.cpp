@@ -15,7 +15,7 @@ namespace std {
 #include <optional>
 int main()
 {
-    WizzardChess app(WIDTH, HEIGHT);
+    WizardChess app(WIDTH, HEIGHT);
 
     try
     {
