@@ -12,7 +12,19 @@
 #include "VulkanSurfaceManager.h"
 #include "MemoryTracker.h"
 
-class WizardChess {
+enum EModelName : unsigned int
+{
+    Cube   = 0,
+    Bishop = 1,
+    King   = 2,
+    Knight = 3,
+    Rook   = 4,
+    Pawn   = 5,
+    Queen  = 6,
+};
+
+class WizardChess
+{
 public:
     WizardChess(int width, int height) : m_width(width), m_height(height) {}
     ~WizardChess();
@@ -70,7 +82,7 @@ private:
     VkImageView             m_textureImageView     = VK_NULL_HANDLE;
     VkSampler               m_textureSampler       = VK_NULL_HANDLE;
 
-    std::vector<Model*>     m_models;
+    std::unordered_map<EModelName, Model*>  m_uniqueModels;
 
     std::vector<VkBuffer>       m_uniformBuffers;
     std::vector<VkDeviceMemory> m_uniformBuffersMemory;

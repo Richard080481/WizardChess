@@ -32,6 +32,7 @@ struct ModelPushConstants
 {
     struct ModelVsPushConstants
     {
+        glm::mat4 world;
         glm::mat4 model;
         glm::mat4 normailzeMatrix;
     } vs;

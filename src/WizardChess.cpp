@@ -43,17 +43,6 @@ const bool enableValidationLayers = true;
 #define COMPILED_SHADER_ROOT "compiled_shaders/"
 #endif // COMPILED_SHADER_ROOT
 
-enum EModel : unsigned int
-{
-    Cube   = 0,
-    Bishop = 1,
-    King   = 2,
-    Knight = 3,
-    Rook   = 4,
-    Pawn   = 5,
-    Queen  = 6,
-};
-
 enum ETexture : unsigned int
 {
     ChessBoardWood = 0,
@@ -66,7 +55,7 @@ enum EShader : unsigned int
     Frag = 1,
 };
 
-static inline std::string GetModelPaths(enum EModel index)
+static inline std::string GetModelPaths(enum EModelName index)
 {
     static constexpr char* modelFileNames[] =
     {
@@ -103,6 +92,61 @@ static inline std::string GetShaderPaths(enum EShader index)
 
     return COMPILED_SHADER_ROOT + std::string(shaderFileNames[index]);
 }
+
+struct ChessPieceInfo
+{
+    char*       m_pieceName;
+    char        m_file;
+    char        m_rank;
+    EModelName  m_modelName;
+
+    std::string PositionStr() const
+    {
+        return std::to_string(m_file) + std::to_string(m_rank);
+    }
+
+    glm::vec3 PositionVec3() const
+    {
+        return glm::vec3(float(m_file - 'A'), 0.0f, -float(m_rank - '1'));
+    }
+};
+
+static constexpr ChessPieceInfo chessPieces[] =
+{
+    {"A1 Rook",   'A', '1', EModelName::Rook},
+    {"B1 Knight", 'B', '1', EModelName::Knight},
+    {"C1 Bishop", 'C', '1', EModelName::Bishop},
+    {"D1 Queen",  'D', '1', EModelName::Queen},
+    {"E1 King",   'E', '1', EModelName::King},
+    {"F1 Bishop", 'F', '1', EModelName::Bishop},
+    {"G1 Knight", 'G', '1', EModelName::Knight},
+    {"H1 Rook",   'H', '1', EModelName::Rook},
+    {"A2 Pawn",   'A', '2', EModelName::Pawn},
+    {"B2 Pawn",   'B', '2', EModelName::Pawn},
+    {"C2 Pawn",   'C', '2', EModelName::Pawn},
+    {"D2 Pawn",   'D', '2', EModelName::Pawn},
+    {"E2 Pawn",   'E', '2', EModelName::Pawn},
+    {"F2 Pawn",   'F', '2', EModelName::Pawn},
+    {"G2 Pawn",   'G', '2', EModelName::Pawn},
+    {"H2 Pawn",   'H', '2', EModelName::Pawn},
+
+    {"A8 Rook",   'A', '8', EModelName::Rook},
+    {"B8 Knight", 'B', '8', EModelName::Knight},
+    {"C8 Bishop", 'C', '8', EModelName::Bishop},
+    {"D8 Queen",  'D', '8', EModelName::Queen},
+    {"E8 King",   'E', '8', EModelName::King},
+    {"F8 Bishop", 'F', '8', EModelName::Bishop},
+    {"G8 Knight", 'G', '8', EModelName::Knight},
+    {"H8 Rook",   'H', '8', EModelName::Rook},
+    {"A7 Pawn",   'A', '7', EModelName::Pawn},
+    {"B7 Pawn",   'B', '7', EModelName::Pawn},
+    {"C7 Pawn",   'C', '7', EModelName::Pawn},
+    {"D7 Pawn",   'D', '7', EModelName::Pawn},
+    {"E7 Pawn",   'E', '7', EModelName::Pawn},
+    {"F7 Pawn",   'F', '7', EModelName::Pawn},
+    {"G7 Pawn",   'G', '7', EModelName::Pawn},
+    {"H7 Pawn",   'H', '7', EModelName::Pawn},
+};
 
 struct UniformBufferObject
 {
@@ -282,12 +326,11 @@ void WizardChess::Cleanup()
 
     vkDestroyDescriptorSetLayout(device, m_descriptorSetLayout, nullptr);
 
-    for (Model*& pModel : m_models)
+    for (auto& [modelName, pModel] : m_uniqueModels)
     {
         delete pModel;
-        pModel = nullptr;
     }
-    m_models.clear();
+    m_uniqueModels.clear();
 
     for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++)
     {
@@ -773,19 +816,19 @@ void WizardChess::LoadModel()
 {
     // Load pieces
     {
-        constexpr EModel firstModelIndex = EModel::Bishop;
-        constexpr EModel lastModelIndex  = EModel::Queen;
-        constexpr int    numModels       = lastModelIndex - firstModelIndex + 1;
-        constexpr float  x_offset        = 1.2f;
-        constexpr float  theta           = 360.0f / numModels;
-        float            maxScale        = 0.0f;
+        constexpr EModelName firstModelIndex = EModelName::Bishop;
+        constexpr EModelName lastModelIndex  = EModelName::Queen;
+        constexpr int        numModels       = lastModelIndex - firstModelIndex + 1;
+        constexpr float      x_offset        = 1.2f;
+        constexpr float      theta           = 360.0f / numModels;
+        float                maxScale        = 0.0f;
+
         for (int i = firstModelIndex; i <= lastModelIndex; i++)
         {
-            Model* pModel = new Model(GetModelPaths(static_cast<EModel>(i)), EModelType::ChessPiece);
+            EModelName modelName = static_cast<EModelName>(i);
+            Model* pModel = new Model(GetModelPaths(modelName), EModelType::ChessPiece);
 
-            pModel->Rotate(theta * i, glm::vec3(0.0f, 1.0f, 0.0f));
-            pModel->Translate(glm::vec3(x_offset, 0.0f, 0.0f));
-
+            // Move up to place on the board.
             pModel->Translate(glm::vec3(0.0f, 1.0f, 0.0f));
 
             ///@note Originally the model was along z-axis.
@@ -793,10 +836,10 @@ void WizardChess::LoadModel()
             pModel->Rotate(-90.0f, glm::vec3(1.0f, 0.0f, 0.0f));
 
             maxScale = std::max(maxScale, pModel->MaxScale());
-            m_models.push_back(pModel);
+            m_uniqueModels[modelName] = pModel;
         }
 
-        for (auto& pModel : m_models)
+        for (auto& [modelName, pModel] : m_uniqueModels)
         {
             pModel->RescaleNormalizeMatrix(1.0f / maxScale);
         }
@@ -804,15 +847,21 @@ void WizardChess::LoadModel()
 
     // Load board
     {
-        Model* pModel = new Model(GetModelPaths(EModel::Cube), EModelType::ChessBoard);
+        Model* pModel = new Model(GetModelPaths(EModelName::Cube), EModelType::ChessBoard);
 
-        pModel->Scale(glm::vec3(5.0f, 0.0f, 5.0f));
+        constexpr float cellCenterOffset = 0.5f;
+        constexpr float borderOffset     = 0.75f;
+        pModel->Translate(glm::vec3(-(borderOffset + cellCenterOffset), 0.0f, (borderOffset + cellCenterOffset)));
+
+        constexpr float scale = 4.75f;
+        pModel->Scale(glm::vec3(scale, 0.0f, scale));
+        pModel->Translate(glm::vec3(1.0f, 0.0f, -1.0f));
 
         ///@note Originally the model was along z-axis.
         ///      Rotate -90 degree along x-axis to make it point to the y-axis.
         pModel->Rotate(-90.0f, glm::vec3(1.0f, 0.0f, 0.0f));
 
-        m_models.push_back(pModel);
+        m_uniqueModels[EModelName::Cube] = pModel;
     }
 }
 
@@ -963,33 +1012,58 @@ void WizardChess::RecordCommandBuffer(VkCommandBuffer commandBuffer, uint32_t im
 
     // Create push constants for passing small amounts of dynamic data to shaders.
     ModelPushConstants pushConstants{};
+    pushConstants.vs.world = glm::mat4(1.0);
 
-    // Render each model in the scene.
-    for (auto& model : m_models)
+    // Rotate to display the world
+    pushConstants.vs.world = glm::rotate(pushConstants.vs.world, time * glm::radians(10.0f), glm::vec3(0.0f, 1.0f, 0.0f));
+
+    // Add back offset to center the world
+    pushConstants.vs.world = glm::translate(pushConstants.vs.world, glm::vec3(-3.5, 0, 3.5));
+
+    auto RecordDrawModel = [commandBuffer=commandBuffer, pipelineLayout=m_pipelineLayout](const ModelPushConstants* pPushConstants, Model* pModel)
     {
-        // Populate the push constants.
-        pushConstants.vs.model = glm::mat4(1.0);
-        pushConstants.vs.model = glm::rotate(pushConstants.vs.model, time * glm::radians(10.0f), glm::vec3(0.0f, 1.0f, 0.0f));
-        pushConstants.vs.model = pushConstants.vs.model * model->ModelMatrix();
-        pushConstants.fs.renderMode = model->RenderMode();
-
         // Bind the vertex buffer for the current model.
-        VkBuffer vertexBuffers[] = { model->VertexBuffer() };
+        VkBuffer vertexBuffers[] = { pModel->VertexBuffer() };
         VkDeviceSize offsets[] = { 0 };
         vkCmdBindVertexBuffers(commandBuffer, 0, 1, vertexBuffers, offsets);
 
         // Bind the index buffer for the current model.
-        vkCmdBindIndexBuffer(commandBuffer, model->IndexBuffer(), 0, VK_INDEX_TYPE_UINT32);
+        vkCmdBindIndexBuffer(commandBuffer, pModel->IndexBuffer(), 0, VK_INDEX_TYPE_UINT32);
 
         // Pass the VS push constant to the vertex shader.
-        pushConstants.vs.normailzeMatrix = model->NormalizeMatrix();
-        vkCmdPushConstants(commandBuffer, m_pipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, offsetof(ModelPushConstants, vs), sizeof(ModelPushConstants::ModelVsPushConstants), &pushConstants.vs);
+        vkCmdPushConstants(commandBuffer, pipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, offsetof(ModelPushConstants, vs), sizeof(ModelPushConstants::ModelVsPushConstants), &pPushConstants->vs);
 
         // Pass the FS push constant to the fragment shader.
-        vkCmdPushConstants(commandBuffer, m_pipelineLayout, VK_SHADER_STAGE_FRAGMENT_BIT, offsetof(ModelPushConstants, fs), sizeof(ModelPushConstants::ModelFsPushConstants), &pushConstants.fs);
+        vkCmdPushConstants(commandBuffer, pipelineLayout, VK_SHADER_STAGE_FRAGMENT_BIT, offsetof(ModelPushConstants, fs), sizeof(ModelPushConstants::ModelFsPushConstants), &pPushConstants->fs);
 
         // Issue a draw command for the indexed geometry of the model.
-        vkCmdDrawIndexed(commandBuffer, static_cast<uint32_t>(model->Indices()), 1, 0, 0, 0);
+        vkCmdDrawIndexed(commandBuffer, static_cast<uint32_t>(pModel->Indices()), 1, 0, 0, 0);
+    };
+
+    // Render each chess piece in the scene.
+    for (const auto& chessPiece : chessPieces)
+    {
+        Model* pModel = m_uniqueModels[chessPiece.m_modelName];
+
+        // Populate the push constants.
+        pushConstants.vs.model           = glm::translate(glm::mat4(1.0), chessPiece.PositionVec3());
+        pushConstants.vs.model           = pushConstants.vs.model * pModel->ModelMatrix();
+        pushConstants.vs.normailzeMatrix = pModel->NormalizeMatrix();
+        pushConstants.fs.renderMode      = pModel->RenderMode();
+
+        RecordDrawModel(&pushConstants, pModel);
+    }
+
+    // Render the chess board.
+    {
+        Model* pModel = m_uniqueModels[EModelName::Cube];
+
+        // Populate the push constants.
+        pushConstants.vs.model           = pModel->ModelMatrix();
+        pushConstants.vs.normailzeMatrix = pModel->NormalizeMatrix();
+        pushConstants.fs.renderMode      = pModel->RenderMode();
+
+        RecordDrawModel(&pushConstants, pModel);
     }
 
     // End the render pass.
@@ -1031,9 +1105,11 @@ void WizardChess::UpdateUniformBuffer(uint32_t currentImage, int modelIndex)
     auto swapChainExtent = VK.SurfaceManager()->SwapChainExtent();
 
     UniformBufferObject ubo{};
-    ubo.view = glm::lookAt(glm::vec3(0.0f, 8.0f, 10.0f),
-                           glm::vec3(0.0f, -0.5f, 0.0f),
-                           glm::vec3(0.0f, 1.0f, 0.0f));
+
+    ubo.view = glm::lookAt(glm::vec3(0.0f, 10.0f, 10.0f),
+                           glm::vec3(0.0f,  0.0f,  0.0f),
+                           glm::vec3(0.0f,  1.0f, -1.0f));
+
     ubo.proj = glm::perspective(glm::radians(45.0f), swapChainExtent.width / (float)swapChainExtent.height, 0.1f, 20.0f);
 
     // Vulkan's y-axis is pointing downwards.

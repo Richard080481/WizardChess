@@ -16,16 +16,17 @@ layout(location = 1) out vec2 fragTexCoord;
 layout(push_constant) uniform constants
 {
     // vs
-    layout(offset = 0)  mat4 model;
-    layout(offset = 64) mat4 normailzeMatrix;
+    layout(offset = 0)   mat4 world;
+    layout(offset = 64)  mat4 model;
+    layout(offset = 128) mat4 normailzeMatrix;
 
     ///@note fs
-    ///      layout(offset = 128) int renderMode;
+    ///      layout(offset = 192) int renderMode;
 } pushConstant;
 
 void main()
 {
-    gl_Position = ubo.proj * ubo.view * pushConstant.model * pushConstant.normailzeMatrix * vec4(inPosition, 1.0);
+    gl_Position = ubo.proj * ubo.view * pushConstant.world * pushConstant.model * pushConstant.normailzeMatrix * vec4(inPosition, 1.0);
     fragColor = inColor;
     fragTexCoord = inTexCoord;
 }
