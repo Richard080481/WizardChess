@@ -13,9 +13,10 @@ layout(push_constant) uniform constants
     ///      layout(offset = 0)   mat4 world;
     ///      layout(offset = 64)  mat4 model;
     ///      layout(offset = 128) mat4 normailzeMatrix;
+    ///      layout(offset = 192) int  isBlack;
 
     // fs
-    layout(offset = 192) int renderMode;
+    layout(offset = 196) int renderMode;
 } pushConstant;
 
 void main()

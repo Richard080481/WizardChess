@@ -43,6 +43,12 @@ const bool enableValidationLayers = true;
 #define COMPILED_SHADER_ROOT "compiled_shaders/"
 #endif // COMPILED_SHADER_ROOT
 
+enum EPieceColor : unsigned int
+{
+    White = 0,
+    Black = 1,
+};
+
 enum ETexture : unsigned int
 {
     ChessBoardWood = 0,
@@ -98,6 +104,7 @@ struct ChessPieceInfo
     char*       m_pieceName;
     char        m_file;
     char        m_rank;
+    EPieceColor m_color;
     EModelName  m_modelName;
 
     std::string PositionStr() const
@@ -113,39 +120,39 @@ struct ChessPieceInfo
 
 static constexpr ChessPieceInfo chessPieces[] =
 {
-    {"A1 Rook",   'A', '1', EModelName::Rook},
-    {"B1 Knight", 'B', '1', EModelName::Knight},
-    {"C1 Bishop", 'C', '1', EModelName::Bishop},
-    {"D1 Queen",  'D', '1', EModelName::Queen},
-    {"E1 King",   'E', '1', EModelName::King},
-    {"F1 Bishop", 'F', '1', EModelName::Bishop},
-    {"G1 Knight", 'G', '1', EModelName::Knight},
-    {"H1 Rook",   'H', '1', EModelName::Rook},
-    {"A2 Pawn",   'A', '2', EModelName::Pawn},
-    {"B2 Pawn",   'B', '2', EModelName::Pawn},
-    {"C2 Pawn",   'C', '2', EModelName::Pawn},
-    {"D2 Pawn",   'D', '2', EModelName::Pawn},
-    {"E2 Pawn",   'E', '2', EModelName::Pawn},
-    {"F2 Pawn",   'F', '2', EModelName::Pawn},
-    {"G2 Pawn",   'G', '2', EModelName::Pawn},
-    {"H2 Pawn",   'H', '2', EModelName::Pawn},
+    {"A1 Rook",   'A', '1', EPieceColor::White, EModelName::Rook},
+    {"B1 Knight", 'B', '1', EPieceColor::White, EModelName::Knight},
+    {"C1 Bishop", 'C', '1', EPieceColor::White, EModelName::Bishop},
+    {"D1 Queen",  'D', '1', EPieceColor::White, EModelName::Queen},
+    {"E1 King",   'E', '1', EPieceColor::White, EModelName::King},
+    {"F1 Bishop", 'F', '1', EPieceColor::White, EModelName::Bishop},
+    {"G1 Knight", 'G', '1', EPieceColor::White, EModelName::Knight},
+    {"H1 Rook",   'H', '1', EPieceColor::White, EModelName::Rook},
+    {"A2 Pawn",   'A', '2', EPieceColor::White, EModelName::Pawn},
+    {"B2 Pawn",   'B', '2', EPieceColor::White, EModelName::Pawn},
+    {"C2 Pawn",   'C', '2', EPieceColor::White, EModelName::Pawn},
+    {"D2 Pawn",   'D', '2', EPieceColor::White, EModelName::Pawn},
+    {"E2 Pawn",   'E', '2', EPieceColor::White, EModelName::Pawn},
+    {"F2 Pawn",   'F', '2', EPieceColor::White, EModelName::Pawn},
+    {"G2 Pawn",   'G', '2', EPieceColor::White, EModelName::Pawn},
+    {"H2 Pawn",   'H', '2', EPieceColor::White, EModelName::Pawn},
 
-    {"A8 Rook",   'A', '8', EModelName::Rook},
-    {"B8 Knight", 'B', '8', EModelName::Knight},
-    {"C8 Bishop", 'C', '8', EModelName::Bishop},
-    {"D8 Queen",  'D', '8', EModelName::Queen},
-    {"E8 King",   'E', '8', EModelName::King},
-    {"F8 Bishop", 'F', '8', EModelName::Bishop},
-    {"G8 Knight", 'G', '8', EModelName::Knight},
-    {"H8 Rook",   'H', '8', EModelName::Rook},
-    {"A7 Pawn",   'A', '7', EModelName::Pawn},
-    {"B7 Pawn",   'B', '7', EModelName::Pawn},
-    {"C7 Pawn",   'C', '7', EModelName::Pawn},
-    {"D7 Pawn",   'D', '7', EModelName::Pawn},
-    {"E7 Pawn",   'E', '7', EModelName::Pawn},
-    {"F7 Pawn",   'F', '7', EModelName::Pawn},
-    {"G7 Pawn",   'G', '7', EModelName::Pawn},
-    {"H7 Pawn",   'H', '7', EModelName::Pawn},
+    {"A8 Rook",   'A', '8', EPieceColor::Black, EModelName::Rook},
+    {"B8 Knight", 'B', '8', EPieceColor::Black, EModelName::Knight},
+    {"C8 Bishop", 'C', '8', EPieceColor::Black, EModelName::Bishop},
+    {"D8 Queen",  'D', '8', EPieceColor::Black, EModelName::Queen},
+    {"E8 King",   'E', '8', EPieceColor::Black, EModelName::King},
+    {"F8 Bishop", 'F', '8', EPieceColor::Black, EModelName::Bishop},
+    {"G8 Knight", 'G', '8', EPieceColor::Black, EModelName::Knight},
+    {"H8 Rook",   'H', '8', EPieceColor::Black, EModelName::Rook},
+    {"A7 Pawn",   'A', '7', EPieceColor::Black, EModelName::Pawn},
+    {"B7 Pawn",   'B', '7', EPieceColor::Black, EModelName::Pawn},
+    {"C7 Pawn",   'C', '7', EPieceColor::Black, EModelName::Pawn},
+    {"D7 Pawn",   'D', '7', EPieceColor::Black, EModelName::Pawn},
+    {"E7 Pawn",   'E', '7', EPieceColor::Black, EModelName::Pawn},
+    {"F7 Pawn",   'F', '7', EPieceColor::Black, EModelName::Pawn},
+    {"G7 Pawn",   'G', '7', EPieceColor::Black, EModelName::Pawn},
+    {"H7 Pawn",   'H', '7', EPieceColor::Black, EModelName::Pawn},
 };
 
 struct UniformBufferObject
@@ -1049,6 +1056,7 @@ void WizardChess::RecordCommandBuffer(VkCommandBuffer commandBuffer, uint32_t im
         pushConstants.vs.model           = glm::translate(glm::mat4(1.0), chessPiece.PositionVec3());
         pushConstants.vs.model           = pushConstants.vs.model * pModel->ModelMatrix();
         pushConstants.vs.normailzeMatrix = pModel->NormalizeMatrix();
+        pushConstants.vs.isBlack         = chessPiece.m_color == EPieceColor::Black;
         pushConstants.fs.renderMode      = pModel->RenderMode();
 
         RecordDrawModel(&pushConstants, pModel);

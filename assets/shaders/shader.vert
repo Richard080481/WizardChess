@@ -19,14 +19,20 @@ layout(push_constant) uniform constants
     layout(offset = 0)   mat4 world;
     layout(offset = 64)  mat4 model;
     layout(offset = 128) mat4 normailzeMatrix;
+    layout(offset = 192) int  isBlack;
 
     ///@note fs
-    ///      layout(offset = 192) int renderMode;
+    ///      layout(offset = 196) int renderMode;
 } pushConstant;
 
 void main()
 {
     gl_Position = ubo.proj * ubo.view * pushConstant.world * pushConstant.model * pushConstant.normailzeMatrix * vec4(inPosition, 1.0);
     fragColor = inColor;
+    fragColor.rgb = fragColor.rgb * 0.8 + 0.2;
+    if (pushConstant.isBlack != 0)
+    {
+        fragColor.rgb *= 0.2f;
+    }
     fragTexCoord = inTexCoord;
 }

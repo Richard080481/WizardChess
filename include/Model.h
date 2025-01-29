@@ -35,6 +35,7 @@ struct ModelPushConstants
         glm::mat4 world;
         glm::mat4 model;
         glm::mat4 normailzeMatrix;
+        int       isBlack;
     } vs;
 
     struct ModelFsPushConstants
