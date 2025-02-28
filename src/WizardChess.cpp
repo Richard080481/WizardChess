@@ -769,29 +769,37 @@ void WizardChess::TransitionImageLayout(VkImage image, VkFormat format, VkImageL
 void WizardChess::LoadModel()
 {
     constexpr EModel firstModelIndex = EModel::Cube;
-    constexpr EModel lastModelIndex  = EModel::Cube;
+    constexpr EModel lastModelIndex  = EModel::Queen;
+
     constexpr int    numModels       = lastModelIndex - firstModelIndex + 1;
-    constexpr float  x_offset        = 0.0f;
+    constexpr float  x_offset        = 0.8f;
     constexpr float  theta           = 360.0f / numModels;
-    float            maxScale        = 0.0f;
+    float            maxScalePiece   = 0.0f;
+    float            maxScaleBoard   = 0.0f;
     for (int i = firstModelIndex; i <= lastModelIndex; i++)
     {
         Model* pModel = new Model(GetModelPaths(static_cast<EModel>(i)));
 
-        pModel->Rotate(theta * i, glm::vec3(0.0f, 1.0f, 0.0f));
-        pModel->Translate(glm::vec3(x_offset, 0.0f, 0.0f));
+        pModel->Translate(glm::vec3(x_offset * (i - (numModels / 2)), 0.0f, 0.0f));
 
-        ///@note Originally the model was along z-axis.
-        ///      Rotate -90 degree along x-axis to make it point to the y-axis.
-        pModel->Rotate(-90.0f, glm::vec3(1.0f, 0.0f, 0.0f));
-
-        maxScale = std::max(maxScale, pModel->MaxScale());
+        if (i == EModel::Cube)
+        {
+            maxScaleBoard = std::max(maxScaleBoard, pModel->MaxScale());
+        }
+        else
+        {
+            ///@note Originally the model was along z-axis.
+            ///      Rotate -90 degree along x-axis to make it point to the y-axis.
+            pModel->Rotate(-90.0f, glm::vec3(1.0f, 0.0f, 0.0f));
+            maxScalePiece = std::max(maxScalePiece, pModel->MaxScale());
+        }
         m_models.push_back(pModel);
     }
 
-    for (auto& pModel : m_models)
+    for (int i = 0; i < m_models.size(); i++)
     {
-        pModel->RescaleNormalizeMatrix(1.0f / maxScale);
+        float scale = (i == EModel::Cube) ? maxScaleBoard : maxScalePiece;
+        m_models[i]->RescaleNormalizeMatrix(1.0f / scale);
     }
 }
 
@@ -936,9 +944,9 @@ void WizardChess::RecordCommandBuffer(VkCommandBuffer commandBuffer, uint32_t im
     vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_pipelineLayout, 0, 1, &m_descriptorSets[m_currentFrame], 0, nullptr);
 
     // Calculate elapsed time to create a dynamic rotation effect for models.
-    static auto startTime = std::chrono::high_resolution_clock::now();
-    auto currentTime = std::chrono::high_resolution_clock::now();
-    float time = std::chrono::duration<float, std::chrono::seconds::period>(currentTime - startTime).count();
+    // static auto startTime = std::chrono::high_resolution_clock::now();
+    // auto currentTime = std::chrono::high_resolution_clock::now();
+    // float time = std::chrono::duration<float, std::chrono::seconds::period>(currentTime - startTime).count();
 
     // Create push constants for passing small amounts of dynamic data to shaders.
     ModelPushConstants constants{};
@@ -948,7 +956,7 @@ void WizardChess::RecordCommandBuffer(VkCommandBuffer commandBuffer, uint32_t im
     {
         // Initialize the model matrix and apply dynamic rotation.
         constants.model = glm::mat4(1.0);
-        constants.model = glm::rotate(constants.model, time * glm::radians(90.0f), glm::vec3(2.0f, 3.0f, 5.0f));
+        // constants.model = glm::rotate(constants.model, time * glm::radians(90.0f), glm::vec3(2.0f, 3.0f, 5.0f));
         constants.model = constants.model * model->ModelMatrix();
 
         // Bind the vertex buffer for the current model.
