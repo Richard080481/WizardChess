@@ -771,16 +771,11 @@ void WizardChess::LoadModel()
     constexpr EModel firstModelIndex = EModel::Cube;
     constexpr EModel lastModelIndex  = EModel::Queen;
 
-    constexpr int    numModels       = lastModelIndex - firstModelIndex + 1;
-    constexpr float  x_offset        = 0.8f;
-    constexpr float  theta           = 360.0f / numModels;
     float            maxScalePiece   = 0.0f;
     float            maxScaleBoard   = 0.0f;
     for (int i = firstModelIndex; i <= lastModelIndex; i++)
     {
         Model* pModel = new Model(GetModelPaths(static_cast<EModel>(i)));
-
-        pModel->Translate(glm::vec3(x_offset * (i - (numModels / 2)), 0.0f, 0.0f));
 
         if (i == EModel::Cube)
         {
@@ -788,9 +783,6 @@ void WizardChess::LoadModel()
         }
         else
         {
-            ///@note Originally the model was along z-axis.
-            ///      Rotate -90 degree along x-axis to make it point to the y-axis.
-            pModel->Rotate(-90.0f, glm::vec3(1.0f, 0.0f, 0.0f));
             maxScalePiece = std::max(maxScalePiece, pModel->MaxScale());
         }
         m_models.push_back(pModel);
@@ -798,8 +790,38 @@ void WizardChess::LoadModel()
 
     for (int i = 0; i < m_models.size(); i++)
     {
-        float scale = (i == EModel::Cube) ? maxScaleBoard : maxScalePiece;
-        m_models[i]->RescaleNormalizeMatrix(1.0f / scale);
+        if (i == EModel::Cube)
+        {
+            m_models[i]->RescaleNormalizeMatrix(1.0f / maxScaleBoard);
+        }
+        else
+        {
+            m_models[i]->RescaleNormalizeMatrix(1.0f / maxScalePiece);
+        }
+    }
+
+    // We define one cell in the chessboard as 1x1 unit.
+    for (int i = 0; i < m_models.size(); i++)
+    {
+        Model* pModel = m_models[i];
+
+        if (i == EModel::Cube)
+        {
+            constexpr float chessBoardWidth = 9.5f;
+            pModel->Scale(glm::vec3(chessBoardWidth / 2.0f, 0.0001f, chessBoardWidth / 2.0f));
+        }
+        else
+        {
+            constexpr float chessPieceWidth = 2.0f;
+            pModel->Scale(chessPieceWidth / 2.0f);
+
+            // Move up 1 unit, so the pieces can be put on the board.
+            pModel->Translate(glm::vec3(0.0f, 1.0f, 0.0f));
+
+            ///@note Originally the model was along z-axis.
+            ///      Rotate -90 degree along x-axis to make it point to the y-axis.
+            pModel->Rotate(-90.0f, glm::vec3(1.0f, 0.0f, 0.0f));
+        }
     }
 }
 
@@ -1014,10 +1036,10 @@ void WizardChess::UpdateUniformBuffer(uint32_t currentImage, int modelIndex)
     auto swapChainExtent = VK.SurfaceManager()->SwapChainExtent();
 
     UniformBufferObject ubo{};
-    ubo.view = glm::lookAt(glm::vec3(0.0f, 1.0f, 5.0f),
-                           glm::vec3(0.0f, -0.5f, 0.0f),
-                           glm::vec3(0.0f, 1.0f, 0.0f));
-    ubo.proj = glm::perspective(glm::radians(45.0f), swapChainExtent.width / (float)swapChainExtent.height, 0.1f, 10.0f);
+    ubo.view = glm::lookAt(glm::vec3(0.0f, 8.0f, 10.0f), // eye
+                           glm::vec3(0.0f, -0.5f, 0.0f), // target
+                           glm::vec3(0.0f, 1.0f, 0.0f)); // up vector
+    ubo.proj = glm::perspective(glm::radians(45.0f), swapChainExtent.width / (float)swapChainExtent.height, 0.1f, 20.0f);
 
     // Vulkan's y-axis is pointing downwards.
     ubo.proj[1][1] *= -1;

@@ -58,6 +58,16 @@ public:
         m_modelMatrix = glm::rotate(m_modelMatrix, glm::radians(degree), axis);
     }
 
+    void Scale(glm::vec3 scale)
+    {
+        m_modelMatrix = glm::scale(m_modelMatrix, scale);
+    }
+
+    void Scale(float scale)
+    {
+        m_modelMatrix = glm::scale(m_modelMatrix, glm::vec3(scale, scale, scale));
+    }
+
     void RescaleNormalizeMatrix(float scale)
     {
         m_normalizeMatrix = glm::scale(m_normalizeMatrix, glm::vec3(MaxScale()));
