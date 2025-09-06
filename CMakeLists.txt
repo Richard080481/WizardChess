@@ -43,11 +43,10 @@ source_group("Shaders" FILES ${SHADER_SOURCE_FILES})
 add_custom_command(
     OUTPUT ${CMAKE_BINARY_DIR}/compiled_shaders/frag.spv
     OUTPUT ${CMAKE_BINARY_DIR}/compiled_shaders/vert.spv
-    COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_BINARY_DIR}/shaders
     COMMAND ${CMAKE_SOURCE_DIR}/assets/shaders/compile.bat ${CMAKE_SOURCE_DIR}/assets/shaders/shader.frag ${CMAKE_BINARY_DIR}/compiled_shaders/frag.spv
     COMMAND ${CMAKE_SOURCE_DIR}/assets/shaders/compile.bat ${CMAKE_SOURCE_DIR}/assets/shaders/shader.vert ${CMAKE_BINARY_DIR}/compiled_shaders/vert.spv
     DEPENDS ${SHADER_SOURCE_FILES}
-    COMMENT "Compiling shaders into ${CMAKE_BINARY_DIR}/shaders"
+    COMMENT "Compiling shaders into ${CMAKE_BINARY_DIR}/compiled_shaders"
 )
 
 # Add executable, including shaders to make them visible in the solution explorer

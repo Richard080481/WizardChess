@@ -46,12 +46,12 @@ const bool enableValidationLayers = true;
 enum EModel : unsigned int
 {
     Cube   = 0,
-    Bishop = 1,
-    King   = 2,
-    Knight = 3,
-    Rook   = 4,
-    Pawn   = 5,
-    Queen  = 6,
+    King   = 1,
+    Queen  = 2,
+    Bishop = 3,
+    Knight = 4,
+    Rook   = 5,
+    Pawn   = 6,
 };
 
 enum ETexture : unsigned int
@@ -71,12 +71,12 @@ static inline std::string GetModelPaths(enum EModel index)
     static constexpr char* modelFileNames[] =
     {
         "Cube.obj",
-        "simplify_Bishop.obj",
         "simplify_King.obj",
+        "simplify_Queen.obj",
+        "simplify_Bishop.obj",
         "simplify_Knight.obj",
         "simplify_Rook.obj",
         "simplify_Pawn.obj",
-        "simplify_Queen.obj",
     };
 
     return MODEL_PATH + std::string(modelFileNames[index]);
@@ -769,7 +769,7 @@ void WizardChess::TransitionImageLayout(VkImage image, VkFormat format, VkImageL
 void WizardChess::LoadModel()
 {
     constexpr EModel firstModelIndex = EModel::Cube;
-    constexpr EModel lastModelIndex  = EModel::Queen;
+    constexpr EModel lastModelIndex  = EModel::Pawn;
 
     float            maxScalePiece   = 0.0f;
     float            maxScaleBoard   = 0.0f;
@@ -783,8 +783,8 @@ void WizardChess::LoadModel()
         }
         else
         {
-            maxScalePiece = std::max(maxScalePiece, pModel->MaxScale());
-        }
+        maxScalePiece = std::max(maxScalePiece, pModel->MaxScale());
+    }
         m_models.push_back(pModel);
     }
 
@@ -817,6 +817,7 @@ void WizardChess::LoadModel()
 
             // Move up 1 unit, so the pieces can be put on the board.
             pModel->Translate(glm::vec3(0.0f, 1.0f, 0.0f));
+            pModel->Translate(glm::vec3(i, 0.0f, 0.0f));
 
             ///@note Originally the model was along z-axis.
             ///      Rotate -90 degree along x-axis to make it point to the y-axis.

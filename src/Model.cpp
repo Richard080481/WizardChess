@@ -75,13 +75,12 @@ void Model::Load(std::string fileNmae)
 
     float maxLength = std::max(std::max((m_boundaries[1] - m_boundaries[0]) / 2,
                                         (m_boundaries[3] - m_boundaries[2]) / 2),
-                               (m_boundaries[5] - m_boundaries[4]) / 2);
+                                        (m_boundaries[5] - m_boundaries[4]) / 2);
     m_normalizeMatrix = glm::mat4(1.0f);
     m_normalizeMatrix = glm::scale(m_normalizeMatrix, glm::vec3(1.0f / maxLength));
-    m_normalizeMatrix = glm::translate(m_normalizeMatrix,
-                                       -glm::vec3((m_boundaries[0] + m_boundaries[1]) / 2,
-                                                  (m_boundaries[2] + m_boundaries[3]) / 2,
-                                                  (m_boundaries[4] + m_boundaries[5]) / 2));
+    m_normalizeMatrix = glm::translate(m_normalizeMatrix, -glm::vec3((m_boundaries[0] + m_boundaries[1]) / 2,
+                                                                     (m_boundaries[2] + m_boundaries[3]) / 2,
+                                                                     (m_boundaries[4] + m_boundaries[5]) / 2));
 
     for (auto& vertex : m_vertices)
     {
