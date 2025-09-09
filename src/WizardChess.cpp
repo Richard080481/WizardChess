@@ -817,7 +817,6 @@ void WizardChess::LoadModel()
 
             // Move up 1 unit, so the pieces can be put on the board.
             pModel->Translate(glm::vec3(0.0f, 1.0f, 0.0f));
-            pModel->Translate(glm::vec3(i, 0.0f, 0.0f));
 
             ///@note Originally the model was along z-axis.
             ///      Rotate -90 degree along x-axis to make it point to the y-axis.
@@ -974,12 +973,64 @@ void WizardChess::RecordCommandBuffer(VkCommandBuffer commandBuffer, uint32_t im
     // Create push constants for passing small amounts of dynamic data to shaders.
     ModelPushConstants constants{};
 
-    // Render each model in the scene.
-    for (auto& model : m_models)
+	struct ModelDrawInfo
     {
+		EModel    modelIndex;
+		glm::vec3 position;
+		// TODO: Add chess piece color (white or black)
+    };
+
+    std::vector<ModelDrawInfo> modelDrawInfos =
+    {
+		// Chessboard
+        { EModel::Cube,   glm::vec3(0.0f, 0.0f, 0.0f) },
+
+        // White pieces
+        { EModel::Rook,   glm::vec3(-3.5f, 0.0f, 3.5f) }, // A1
+        { EModel::Knight, glm::vec3(-2.5f, 0.0f, 3.5f) }, // B1
+        { EModel::Bishop, glm::vec3(-1.5f, 0.0f, 3.5f) }, // C1
+        { EModel::Queen,  glm::vec3(-0.5f, 0.0f, 3.5f) }, // D1
+        { EModel::King,   glm::vec3( 0.5f, 0.0f, 3.5f) }, // E1
+        { EModel::Bishop, glm::vec3( 1.5f, 0.0f, 3.5f) }, // F1
+        { EModel::Knight, glm::vec3( 2.5f, 0.0f, 3.5f) }, // G1
+        { EModel::Rook,   glm::vec3( 3.5f, 0.0f, 3.5f) }, // H1
+        { EModel::Pawn,   glm::vec3(-3.5f, 0.0f, 2.5f) }, // A2
+        { EModel::Pawn,   glm::vec3(-2.5f, 0.0f, 2.5f) }, // B2
+        { EModel::Pawn,   glm::vec3(-1.5f, 0.0f, 2.5f) }, // C2
+        { EModel::Pawn,   glm::vec3(-0.5f, 0.0f, 2.5f) }, // D2
+        { EModel::Pawn,   glm::vec3( 0.5f, 0.0f, 2.5f) }, // E2
+        { EModel::Pawn,   glm::vec3( 1.5f, 0.0f, 2.5f) }, // F2
+        { EModel::Pawn,   glm::vec3( 2.5f, 0.0f, 2.5f) }, // G2
+        { EModel::Pawn,   glm::vec3( 3.5f, 0.0f, 2.5f) }, // H2
+
+        // Black pieces
+        { EModel::Rook,   glm::vec3(-3.5f, 0.0f, -3.5f) }, // A8
+        { EModel::Knight, glm::vec3(-2.5f, 0.0f, -3.5f) }, // B8
+        { EModel::Bishop, glm::vec3(-1.5f, 0.0f, -3.5f) }, // C8
+        { EModel::Queen,  glm::vec3(-0.5f, 0.0f, -3.5f) }, // D8
+        { EModel::King,   glm::vec3( 0.5f, 0.0f, -3.5f) }, // E8
+        { EModel::Bishop, glm::vec3( 1.5f, 0.0f, -3.5f) }, // F8
+        { EModel::Knight, glm::vec3( 2.5f, 0.0f, -3.5f) }, // G8
+        { EModel::Rook,   glm::vec3( 3.5f, 0.0f, -3.5f) }, // H8
+        { EModel::Pawn,   glm::vec3(-3.5f, 0.0f, -2.5f) }, // A7
+        { EModel::Pawn,   glm::vec3(-2.5f, 0.0f, -2.5f) }, // B7
+        { EModel::Pawn,   glm::vec3(-1.5f, 0.0f, -2.5f) }, // C7
+        { EModel::Pawn,   glm::vec3(-0.5f, 0.0f, -2.5f) }, // D7
+        { EModel::Pawn,   glm::vec3( 0.5f, 0.0f, -2.5f) }, // E7
+        { EModel::Pawn,   glm::vec3( 1.5f, 0.0f, -2.5f) }, // F7
+        { EModel::Pawn,   glm::vec3( 2.5f, 0.0f, -2.5f) }, // G7
+        { EModel::Pawn,   glm::vec3( 3.5f, 0.0f, -2.5f) }, // H7
+    };
+
+    // Render each model in the scene.
+    for (const auto& modelDrawInfo : modelDrawInfos)
+    {
+		auto model = m_models[static_cast<int>(modelDrawInfo.modelIndex)];
         // Initialize the model matrix and apply dynamic rotation.
         constants.model = glm::mat4(1.0);
         // constants.model = glm::rotate(constants.model, time * glm::radians(90.0f), glm::vec3(2.0f, 3.0f, 5.0f));
+        constants.model = glm::translate(constants.model, modelDrawInfo.position);
+
         constants.model = constants.model * model->ModelMatrix();
 
         // Bind the vertex buffer for the current model.
