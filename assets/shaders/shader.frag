@@ -1,5 +1,13 @@
 #version 450
 
+layout(push_constant) uniform PushConstants
+{
+    mat4 model;
+    mat4 normailzeMatrix;
+    vec3 color;
+    bool useTexture;
+} pc;
+
 layout(binding = 1) uniform sampler2D texSampler;
 
 layout(location = 0) in vec3 fragColor;
@@ -9,6 +17,12 @@ layout(location = 0) out vec4 outColor;
 
 void main()
 {
-    outColor = texture(texSampler, fragTexCoord);
-    //outColor = vec4(fragColor, 1.0);
+    if (pc.useTexture)
+    {
+        outColor = texture(texSampler, fragTexCoord);
+    }
+    else
+    {
+        outColor = vec4(pc.color, 1.0);
+    }
 }

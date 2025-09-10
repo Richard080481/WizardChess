@@ -61,6 +61,8 @@ struct ModelPushConstants
 {
     glm::mat4 model;
     glm::mat4 normailzeMatrix;
+    glm::vec3 color;
+	bool useTexture;
 };
 
 #endif // __TYPES_H__
