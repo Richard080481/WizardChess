@@ -934,7 +934,7 @@ void WizardChess::RecordCommandBuffer(VkCommandBuffer commandBuffer, uint32_t im
 
 	// Clear values for the color and depth buffer.
 	std::array<VkClearValue, 2> clearValues{};
-	clearValues[0].color = { {0.25f, 0.0f, 0.0f, 1.0f} }; // Clear color to a dark red.
+	clearValues[0].color = { {0.319f, 0.009f, 0.010f, 1.0f} }; // Clear color to a USC Cardinal red in SRGB.
 	clearValues[1].depthStencil = { 1.0f, 0 }; // Clear depth to 1.0 and stencil to 0.
 
 	renderPassInfo.clearValueCount = static_cast<uint32_t>(clearValues.size());
