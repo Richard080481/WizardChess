@@ -23,6 +23,12 @@ public:
         m_framebufferResized = true;
     }
 
+    bool   m_mousePressed = false;
+    double m_lastMouseX   = 0.0;
+    double m_deltaX       = 0.0;
+    double m_lastMouseY   = 0.0;
+    double m_deltaY       = 0.0;
+
 private:
     void     InitVulkan();
     void     MainLoop();

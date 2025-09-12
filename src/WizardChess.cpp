@@ -138,10 +138,36 @@ void WizardChess::run()
 	Cleanup();
 }
 
-static void framebufferResizeCallback(GLFWwindow* window, int width, int height)
+static void FramebufferResizeCallback(GLFWwindow* window, int width, int height)
 {
 	auto app = reinterpret_cast<WizardChess*>(glfwGetWindowUserPointer(window));
 	app->SetFramebufferResized();
+	// printf("width: %d, height: %d\n", width, height);
+}
+
+static void MouseButtonCallback(GLFWwindow* window, int button, int action, int mods)
+{
+	auto app = reinterpret_cast<WizardChess*>(glfwGetWindowUserPointer(window));
+	//printf("button: %d, action: %d, mods: %d\n", button, action, mods);
+	if (button == GLFW_MOUSE_BUTTON_RIGHT)
+	{
+		app->m_mousePressed = (action == GLFW_PRESS);
+	}
+}
+
+static void MouseMoveCallback(GLFWwindow* window, double xpos, double ypos)
+{
+	auto app = reinterpret_cast<WizardChess*>(glfwGetWindowUserPointer(window));
+	//printf("xpos: %lf, ypos: %lf\n", xpos, ypos);
+	if (app->m_mousePressed)
+	{
+	    app->m_deltaX = xpos - app->m_lastMouseX;
+	    app->m_deltaY = ypos - app->m_lastMouseY;
+	    // You can now use app->m_deltaX for camera or object movement
+		//printf("drag: %llf %llf\n", app->m_deltaX, app->m_deltaY);
+	}
+	app->m_lastMouseX = xpos;
+	app->m_lastMouseY = ypos;
 }
 
 void WizardChess::InitVulkan()
@@ -153,6 +179,13 @@ void WizardChess::InitVulkan()
 	///      This ensures GLFW performs its internal setups, including platform-specific windowing
 	///      and registering Vulkan extensions required for rendering.
 	VK.CreateGlfwWindow(m_width, m_height);
+	
+	auto window = VK.SurfaceManager()->Window();
+
+    glfwSetWindowUserPointer(window, this);
+    glfwSetFramebufferSizeCallback(window, FramebufferResizeCallback);
+	glfwSetMouseButtonCallback(window, MouseButtonCallback);
+	glfwSetCursorPosCallback(window, MouseMoveCallback);
 
 	// Enable validation layers for debugging and error checking (if enabled).
 	// This registers the list of validation layers that will be used.

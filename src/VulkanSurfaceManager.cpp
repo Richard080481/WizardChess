@@ -12,8 +12,6 @@ void VulkanSurfaceManager::InitWindow(int width, int height)
     glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
 
     m_window = glfwCreateWindow(width, height, "Vulkan", nullptr, nullptr);
-    glfwSetWindowUserPointer(m_window, this);
-    //glfwSetFramebufferSizeCallback(m_window, framebufferResizeCallback);
 }
 
 void VulkanSurfaceManager::CreateSurface()
