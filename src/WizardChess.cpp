@@ -148,7 +148,7 @@ static void FramebufferResizeCallback(GLFWwindow* window, int width, int height)
 static void MouseButtonCallback(GLFWwindow* window, int button, int action, int mods)
 {
 	auto app = reinterpret_cast<WizardChess*>(glfwGetWindowUserPointer(window));
-	//printf("button: %d, action: %d, mods: %d\n", button, action, mods);
+	// printf("button: %d, action: %d, mods: %d\n", button, action, mods);
 	if (button == GLFW_MOUSE_BUTTON_RIGHT)
 	{
 		app->m_mousePressed = (action == GLFW_PRESS);
@@ -157,14 +157,29 @@ static void MouseButtonCallback(GLFWwindow* window, int button, int action, int 
 
 static void MouseMoveCallback(GLFWwindow* window, double xpos, double ypos)
 {
+	float sensitivity = 0.25f;
 	auto app = reinterpret_cast<WizardChess*>(glfwGetWindowUserPointer(window));
-	//printf("xpos: %lf, ypos: %lf\n", xpos, ypos);
+	// printf("xpos: %lf, ypos: %lf\n", xpos, ypos);
 	if (app->m_mousePressed)
 	{
-	    app->m_deltaX = xpos - app->m_lastMouseX;
-	    app->m_deltaY = ypos - app->m_lastMouseY;
-	    // You can now use app->m_deltaX for camera or object movement
-		//printf("drag: %llf %llf\n", app->m_deltaX, app->m_deltaY);
+		float dx          = xpos - app->m_lastMouseX;
+		float dy          = ypos - app->m_lastMouseY;
+		float sensitivity = 0.25f;
+
+		app->m_mouseRotateAngleX += static_cast<float>(dx) * sensitivity;
+		app->m_mouseRotateAngleY += static_cast<float>(dy) * sensitivity;
+
+		while (app->m_mouseRotateAngleX > 360.0f) app->m_mouseRotateAngleX -= 360.0f;
+		while (app->m_mouseRotateAngleX < 0.0f) app->m_mouseRotateAngleX += 360.0f;
+		if (app->m_mouseRotateAngleY > 90.0f) app->m_mouseRotateAngleY = 90.0f;
+		if (app->m_mouseRotateAngleY < -30.0f) app->m_mouseRotateAngleY = -30.0f;
+
+		// printf("app->m_mouseRotateAngle (%lf, %lf)\n", app->m_mouseRotateAngleX, app->m_mouseRotateAngleY);
+
+		app->m_mouseRotateMat = glm::mat4(1.0f);
+		app->m_mouseRotateMat = glm::rotate(app->m_mouseRotateMat, glm::radians(app->m_mouseRotateAngleY), glm::vec3(1.0f, 0.0f, 0.0f)); // Rotate around X-axis
+		app->m_mouseRotateMat = glm::rotate(app->m_mouseRotateMat, glm::radians(app->m_mouseRotateAngleX), glm::vec3(0.0f, 1.0f, 0.0f)); // Rotate around Y-axis
+		// printf("deltaX: %lf, deltaY: %lf\n", deltaX, deltaY);
 	}
 	app->m_lastMouseX = xpos;
 	app->m_lastMouseY = ypos;
@@ -1063,9 +1078,9 @@ void WizardChess::RecordCommandBuffer(VkCommandBuffer commandBuffer, uint32_t im
 		auto model = m_models[static_cast<int>(modelDrawInfo.modelIndex)];
 		// Initialize the model matrix and apply dynamic rotation.
 		constants.model = glm::mat4(1.0);
-		// constants.model = glm::rotate(constants.model, time * glm::radians(90.0f), glm::vec3(2.0f, 3.0f, 5.0f));
+		constants.model *= m_mouseRotateMat;
 		constants.model = glm::translate(constants.model, modelDrawInfo.position);
-
+		
 		constants.model = constants.model * model->ModelMatrix();
 
 		// Set the color for the current model.

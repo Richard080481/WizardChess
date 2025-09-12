@@ -23,11 +23,12 @@ public:
         m_framebufferResized = true;
     }
 
-    bool   m_mousePressed = false;
-    double m_lastMouseX   = 0.0;
-    double m_deltaX       = 0.0;
-    double m_lastMouseY   = 0.0;
-    double m_deltaY       = 0.0;
+    bool      m_mousePressed      = false;
+    float     m_lastMouseX        = 0.0f;
+    float     m_lastMouseY        = 0.0f;
+    float     m_mouseRotateAngleX = 0.0f;
+    float     m_mouseRotateAngleY = 0.0f;
+    glm::mat4 m_mouseRotateMat    = glm::mat4(1.0f);
 
 private:
     void     InitVulkan();
