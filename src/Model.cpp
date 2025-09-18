@@ -18,6 +18,40 @@ Model::~Model()
     vkFreeMemory(VK.Device(), m_vertexBufferMemory, nullptr);
 }
 
+void ComputeSmoothNormals(const std::vector<uint32_t>& indices, std::vector<Vertex>& vertices)
+{
+    // Initialize all normals to zero
+    for (auto& vertex : vertices)
+    {
+        vertex.normal = glm::vec3(0.0f);
+    }
+
+    // Accumulate face normals
+    for (size_t i = 0; i < indices.size(); i += 3)
+    {
+        uint32_t i0 = indices[i];
+        uint32_t i1 = indices[i + 1];
+        uint32_t i2 = indices[i + 2];
+
+        glm::vec3 v0 = vertices[i0].pos;
+        glm::vec3 v1 = vertices[i1].pos;
+        glm::vec3 v2 = vertices[i2].pos;
+
+        glm::vec3 normal = glm::normalize(glm::cross(v1 - v0, v2 - v0));
+
+        // Add to vertex normals
+        vertices[i0].normal += normal;
+        vertices[i1].normal += normal;
+        vertices[i2].normal += normal;
+    }
+
+    // Normalize each normal
+    for (auto& vertex : vertices)
+    {
+        vertex.normal = glm::normalize(vertex.normal);
+    }
+}
+
 void Model::Load(std::string fileNmae)
 {
     tinyobj::attrib_t attrib;
@@ -88,6 +122,9 @@ void Model::Load(std::string fileNmae)
         vertex.color[1] = (vertex.color[1] - m_boundaries[2]) / (m_boundaries[3] - m_boundaries[2]);
         vertex.color[2] = (vertex.color[2] - m_boundaries[4]) / (m_boundaries[5] - m_boundaries[4]);
     }
+
+    ComputeSmoothNormals(m_indices, m_vertices);
+
 }
 
 void Model::CreateVertexBuffer()
