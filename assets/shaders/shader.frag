@@ -10,6 +10,13 @@ layout(push_constant) uniform PushConstants
 
 layout(binding = 1) uniform sampler2D texSampler;
 
+layout(binding = 2) uniform UniformBufferObjectFs
+{
+    vec3 lightPos;
+    vec3 lightColor;
+    vec3 cameraPos;
+} ubo;
+
 layout(location = 0) in vec3 fragColor;
 layout(location = 1) in vec2 fragTexCoord;
 layout(location = 2) in vec3 fragNormal;
@@ -26,5 +33,6 @@ void main()
     {
         // outColor = vec4(pc.color, 1.0);
         vec3 v3Normal = fragNormal * 0.5 + 0.5;
+        outColor = vec4(ubo.cameraPos, 1.0);
     }
 }

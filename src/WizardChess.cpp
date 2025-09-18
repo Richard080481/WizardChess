@@ -104,10 +104,17 @@ static inline std::string GetShaderPaths(enum EShader index)
 	return COMPILED_SHADER_ROOT + std::string(shaderFileNames[index]);
 }
 
-struct UniformBufferObject
+struct UniformBufferObjectVs
 {
 	alignas(16) glm::mat4 view;
 	alignas(16) glm::mat4 proj;
+};
+
+struct UniformBufferObjectFs
+{
+	alignas(16) glm::vec3 lightPos;
+	alignas(16) glm::vec3 lightColor;
+	alignas(16) glm::vec3 cameraPos;
 };
 
 const int MAX_FRAMES_IN_FLIGHT = 2;
@@ -316,8 +323,11 @@ void WizardChess::Cleanup()
 
 	for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++)
 	{
-		vkDestroyBuffer(device, m_uniformBuffers[i], nullptr);
-		vkFreeMemory(device, m_uniformBuffersMemory[i], nullptr);
+		vkDestroyBuffer(device, m_uniformBuffersVs[i], nullptr);
+		vkFreeMemory(device, m_uniformBuffersVsMemory[i], nullptr);
+
+		vkDestroyBuffer(device, m_uniformBuffersFs[i], nullptr);
+		vkFreeMemory(device, m_uniformBuffersFsMemory[i], nullptr);
 	}
 
 	vkDestroyDescriptorPool(device, m_descriptorPool, nullptr);
@@ -421,12 +431,12 @@ void WizardChess::CreateRenderPass()
 
 void WizardChess::CreateDescriptorSetLayout()
 {
-	VkDescriptorSetLayoutBinding uboLayoutBinding{};
-    uboLayoutBinding.binding                = 0;
-    uboLayoutBinding.descriptorCount        = 1;
-    uboLayoutBinding.descriptorType         = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-    uboLayoutBinding.pImmutableSamplers     = nullptr;
-    uboLayoutBinding.stageFlags             = VK_SHADER_STAGE_VERTEX_BIT;
+	VkDescriptorSetLayoutBinding uboVsLayoutBinding{};
+    uboVsLayoutBinding.binding              = 0;
+    uboVsLayoutBinding.descriptorCount      = 1;
+    uboVsLayoutBinding.descriptorType       = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+    uboVsLayoutBinding.pImmutableSamplers   = nullptr;
+    uboVsLayoutBinding.stageFlags           = VK_SHADER_STAGE_VERTEX_BIT;
 
 	VkDescriptorSetLayoutBinding samplerLayoutBinding{};
     samplerLayoutBinding.binding            = 1;
@@ -435,7 +445,14 @@ void WizardChess::CreateDescriptorSetLayout()
 	samplerLayoutBinding.pImmutableSamplers = nullptr;
     samplerLayoutBinding.stageFlags         = VK_SHADER_STAGE_FRAGMENT_BIT;
 
-	std::array<VkDescriptorSetLayoutBinding, 2> bindings = { uboLayoutBinding, samplerLayoutBinding };
+	VkDescriptorSetLayoutBinding uboFsLayoutBinding{};
+    uboFsLayoutBinding.binding              = 2;
+    uboFsLayoutBinding.descriptorCount      = 1;
+    uboFsLayoutBinding.descriptorType       = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+    uboFsLayoutBinding.pImmutableSamplers   = nullptr;
+    uboFsLayoutBinding.stageFlags           = VK_SHADER_STAGE_FRAGMENT_BIT;
+
+	std::array<VkDescriptorSetLayoutBinding, 3> bindings = { uboVsLayoutBinding, samplerLayoutBinding, uboFsLayoutBinding };
 	VkDescriptorSetLayoutCreateInfo layoutInfo{};
     layoutInfo.sType                        = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
     layoutInfo.bindingCount                 = static_cast<uint32_t>(bindings.size());
@@ -875,17 +892,28 @@ void WizardChess::LoadModel()
 
 void WizardChess::CreateUniformBuffers()
 {
-	VkDeviceSize bufferSize = sizeof(UniformBufferObject);
-
-	m_uniformBuffers.resize(MAX_FRAMES_IN_FLIGHT);
-	m_uniformBuffersMemory.resize(MAX_FRAMES_IN_FLIGHT);
-	m_uniformBuffersMapped.resize(MAX_FRAMES_IN_FLIGHT);
+	VkDeviceSize bufferSizeVs = sizeof(UniformBufferObjectVs);
+	m_uniformBuffersVs.resize(MAX_FRAMES_IN_FLIGHT);
+	m_uniformBuffersVsMemory.resize(MAX_FRAMES_IN_FLIGHT);
+	m_uniformBuffersVsMapped.resize(MAX_FRAMES_IN_FLIGHT);
 
 	for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++)
 	{
-		CreateBuffer(bufferSize, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, m_uniformBuffers[i], m_uniformBuffersMemory[i]);
+		CreateBuffer(bufferSizeVs, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, m_uniformBuffersVs[i], m_uniformBuffersVsMemory[i]);
 
-		vkMapMemory(VK.Device(), m_uniformBuffersMemory[i], 0, bufferSize, 0, &m_uniformBuffersMapped[i]);
+		vkMapMemory(VK.Device(), m_uniformBuffersVsMemory[i], 0, bufferSizeVs, 0, &m_uniformBuffersVsMapped[i]);
+	}
+
+	VkDeviceSize bufferSizeFs = sizeof(UniformBufferObjectFs);
+	m_uniformBuffersFs.resize(MAX_FRAMES_IN_FLIGHT);
+	m_uniformBuffersFsMemory.resize(MAX_FRAMES_IN_FLIGHT);
+	m_uniformBuffersFsMapped.resize(MAX_FRAMES_IN_FLIGHT);
+
+	for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++)
+	{
+		CreateBuffer(bufferSizeFs, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, m_uniformBuffersFs[i], m_uniformBuffersFsMemory[i]);
+
+		vkMapMemory(VK.Device(), m_uniformBuffersFsMemory[i], 0, bufferSizeFs, 0, &m_uniformBuffersFsMapped[i]);
 	}
 }
 
@@ -926,17 +954,22 @@ void WizardChess::CreateDescriptorSets()
 
 	for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++)
 	{
-		VkDescriptorBufferInfo bufferInfo{};
-		bufferInfo.buffer = m_uniformBuffers[i];
-		bufferInfo.offset = 0;
-        bufferInfo.range  = sizeof(UniformBufferObject);
+		VkDescriptorBufferInfo bufferInfoUboVs{};
+		bufferInfoUboVs.buffer = m_uniformBuffersVs[i];
+		bufferInfoUboVs.offset = 0;
+        bufferInfoUboVs.range  = sizeof(UniformBufferObjectVs);
 
 		VkDescriptorImageInfo imageInfo{};
 		imageInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
         imageInfo.imageView   = m_textureImageView;
         imageInfo.sampler     = m_textureSampler;
 
-		std::array<VkWriteDescriptorSet, 2> descriptorWrites{};
+		VkDescriptorBufferInfo bufferInfoUboFs{};
+		bufferInfoUboFs.buffer = m_uniformBuffersFs[i];
+		bufferInfoUboFs.offset = 0;
+		bufferInfoUboFs.range  = sizeof(UniformBufferObjectFs);
+
+		std::array<VkWriteDescriptorSet, 3> descriptorWrites{};
 
         descriptorWrites[0].sType           = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
         descriptorWrites[0].dstSet          = m_descriptorSets[i];
@@ -944,7 +977,7 @@ void WizardChess::CreateDescriptorSets()
 		descriptorWrites[0].dstArrayElement = 0;
         descriptorWrites[0].descriptorType  = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
 		descriptorWrites[0].descriptorCount = 1;
-        descriptorWrites[0].pBufferInfo     = &bufferInfo;
+        descriptorWrites[0].pBufferInfo     = &bufferInfoUboVs;
 
         descriptorWrites[1].sType           = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
         descriptorWrites[1].dstSet          = m_descriptorSets[i];
@@ -954,6 +987,13 @@ void WizardChess::CreateDescriptorSets()
 		descriptorWrites[1].descriptorCount = 1;
         descriptorWrites[1].pImageInfo      = &imageInfo;
 
+		descriptorWrites[2].sType           = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+        descriptorWrites[2].dstSet          = m_descriptorSets[i];
+        descriptorWrites[2].dstBinding      = 2;
+		descriptorWrites[2].dstArrayElement = 0;
+        descriptorWrites[2].descriptorType  = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+		descriptorWrites[2].descriptorCount = 1;
+        descriptorWrites[2].pBufferInfo     = &bufferInfoUboFs;
 		vkUpdateDescriptorSets(VK.Device(), static_cast<uint32_t>(descriptorWrites.size()), descriptorWrites.data(), 0, nullptr);
 	}
 }
@@ -1143,16 +1183,24 @@ void WizardChess::UpdateUniformBuffer(uint32_t currentImage, int modelIndex)
 {
 	auto swapChainExtent = VK.SurfaceManager()->SwapChainExtent();
 
-	UniformBufferObject ubo{};
-	ubo.view = glm::lookAt(glm::vec3(0.0f, 8.0f, 10.0f), // eye
+	UniformBufferObjectVs uboVs{};
+	uboVs.view = glm::lookAt(glm::vec3(0.0f, 8.0f, 10.0f), // eye
 		glm::vec3(0.0f, -0.5f, 0.0f), // target
 		glm::vec3(0.0f, 1.0f, 0.0f)); // up vector
-	ubo.proj = glm::perspective(glm::radians(45.0f), swapChainExtent.width / (float)swapChainExtent.height, 0.1f, 20.0f);
+	uboVs.proj = glm::perspective(glm::radians(45.0f), swapChainExtent.width / (float)swapChainExtent.height, 0.1f, 20.0f);
 
 	// Vulkan's y-axis is pointing downwards.
-	ubo.proj[1][1] *= -1;
+	uboVs.proj[1][1] *= -1;
 
-	memcpy(m_uniformBuffersMapped[currentImage], &ubo, sizeof(ubo));
+	memcpy(m_uniformBuffersVsMapped[currentImage], &uboVs, sizeof(uboVs));
+
+	UniformBufferObjectFs uboFs{};
+
+	uboFs.lightPos   = glm::vec3(1.0, 0.0, 0.0);
+	uboFs.lightColor = glm::vec3(0.0, 1.0, 0.0);
+	uboFs.cameraPos  = glm::vec3(0.0, 0.0, 1.0);
+
+	memcpy(m_uniformBuffersFsMapped[currentImage], &uboFs, sizeof(uboFs));
 }
 
 void WizardChess::DrawFrame()

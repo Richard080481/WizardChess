@@ -79,9 +79,13 @@ private:
 
     std::vector<Model*>     m_models;
 
-    std::vector<VkBuffer>       m_uniformBuffers;
-    std::vector<VkDeviceMemory> m_uniformBuffersMemory;
-    std::vector<void*>          m_uniformBuffersMapped;
+    std::vector<VkBuffer>       m_uniformBuffersVs;
+    std::vector<VkDeviceMemory> m_uniformBuffersVsMemory;
+    std::vector<void*>          m_uniformBuffersVsMapped;
+
+    std::vector<VkBuffer>       m_uniformBuffersFs;
+    std::vector<VkDeviceMemory> m_uniformBuffersFsMemory;
+    std::vector<void*>          m_uniformBuffersFsMapped;
 
     VkDescriptorPool             m_descriptorPool;
     std::vector<VkDescriptorSet> m_descriptorSets;
