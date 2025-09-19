@@ -201,7 +201,7 @@ void WizardChess::InitVulkan()
 	///      This ensures GLFW performs its internal setups, including platform-specific windowing
 	///      and registering Vulkan extensions required for rendering.
 	VK.CreateGlfwWindow(m_width, m_height);
-	
+
 	auto window = VK.SurfaceManager()->Window();
 
     glfwSetWindowUserPointer(window, this);
@@ -1065,51 +1065,51 @@ void WizardChess::RecordCommandBuffer(VkCommandBuffer commandBuffer, uint32_t im
 	{
 		EModel    modelIndex;
 		glm::vec3 position;
-		glm::vec3 color;
-		bool useTexture;
+		VkBool32  isWhite;
+		VkBool32  useTexture;
 		// TODO: Add chess piece color (white or black)
 	};
 
 	std::vector<ModelDrawInfo> modelDrawInfos =
 	{
 		// Chessboard
-		{ EModel::Cube,   glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f), true},
+		{ EModel::Cube,   glm::vec3(0.0f, 0.0f, 0.0f), VK_FALSE, VK_TRUE},
 
 		// White pieces
-		{ EModel::Rook,   glm::vec3(-3.5f, 0.0f, 3.5f), glm::vec3(1.0f), false }, // A1
-		{ EModel::Knight, glm::vec3(-2.5f, 0.0f, 3.5f), glm::vec3(1.0f), false }, // B1
-		{ EModel::Bishop, glm::vec3(-1.5f, 0.0f, 3.5f), glm::vec3(1.0f), false }, // C1
-		{ EModel::Queen,  glm::vec3(-0.5f, 0.0f, 3.5f), glm::vec3(1.0f), false }, // D1
-		{ EModel::King,   glm::vec3( 0.5f, 0.0f, 3.5f), glm::vec3(1.0f), false }, // E1
-		{ EModel::Bishop, glm::vec3( 1.5f, 0.0f, 3.5f), glm::vec3(1.0f), false }, // F1
-		{ EModel::Knight, glm::vec3( 2.5f, 0.0f, 3.5f), glm::vec3(1.0f), false }, // G1
-		{ EModel::Rook,   glm::vec3( 3.5f, 0.0f, 3.5f), glm::vec3(1.0f), false }, // H1
-		{ EModel::Pawn,   glm::vec3(-3.5f, 0.0f, 2.5f), glm::vec3(1.0f), false }, // A2
-		{ EModel::Pawn,   glm::vec3(-2.5f, 0.0f, 2.5f), glm::vec3(1.0f), false }, // B2
-		{ EModel::Pawn,   glm::vec3(-1.5f, 0.0f, 2.5f), glm::vec3(1.0f), false }, // C2
-		{ EModel::Pawn,   glm::vec3(-0.5f, 0.0f, 2.5f), glm::vec3(1.0f), false }, // D2
-		{ EModel::Pawn,   glm::vec3( 0.5f, 0.0f, 2.5f), glm::vec3(1.0f), false }, // E2
-		{ EModel::Pawn,   glm::vec3( 1.5f, 0.0f, 2.5f), glm::vec3(1.0f), false }, // F2
-		{ EModel::Pawn,   glm::vec3( 2.5f, 0.0f, 2.5f), glm::vec3(1.0f), false }, // G2
-		{ EModel::Pawn,   glm::vec3( 3.5f, 0.0f, 2.5f), glm::vec3(1.0f), false }, // H2
+		{ EModel::Rook,   glm::vec3(-3.5f, 0.0f, 3.5f), VK_TRUE, VK_FALSE }, // A1
+		{ EModel::Knight, glm::vec3(-2.5f, 0.0f, 3.5f), VK_TRUE, VK_FALSE }, // B1
+		{ EModel::Bishop, glm::vec3(-1.5f, 0.0f, 3.5f), VK_TRUE, VK_FALSE }, // C1
+		{ EModel::Queen,  glm::vec3(-0.5f, 0.0f, 3.5f), VK_TRUE, VK_FALSE }, // D1
+		{ EModel::King,   glm::vec3( 0.5f, 0.0f, 3.5f), VK_TRUE, VK_FALSE }, // E1
+		{ EModel::Bishop, glm::vec3( 1.5f, 0.0f, 3.5f), VK_TRUE, VK_FALSE }, // F1
+		{ EModel::Knight, glm::vec3( 2.5f, 0.0f, 3.5f), VK_TRUE, VK_FALSE }, // G1
+		{ EModel::Rook,   glm::vec3( 3.5f, 0.0f, 3.5f), VK_TRUE, VK_FALSE }, // H1
+		{ EModel::Pawn,   glm::vec3(-3.5f, 0.0f, 2.5f), VK_TRUE, VK_FALSE }, // A2
+		{ EModel::Pawn,   glm::vec3(-2.5f, 0.0f, 2.5f), VK_TRUE, VK_FALSE }, // B2
+		{ EModel::Pawn,   glm::vec3(-1.5f, 0.0f, 2.5f), VK_TRUE, VK_FALSE }, // C2
+		{ EModel::Pawn,   glm::vec3(-0.5f, 0.0f, 2.5f), VK_TRUE, VK_FALSE }, // D2
+		{ EModel::Pawn,   glm::vec3( 0.5f, 0.0f, 2.5f), VK_TRUE, VK_FALSE }, // E2
+		{ EModel::Pawn,   glm::vec3( 1.5f, 0.0f, 2.5f), VK_TRUE, VK_FALSE }, // F2
+		{ EModel::Pawn,   glm::vec3( 2.5f, 0.0f, 2.5f), VK_TRUE, VK_FALSE }, // G2
+		{ EModel::Pawn,   glm::vec3( 3.5f, 0.0f, 2.5f), VK_TRUE, VK_FALSE }, // H2
 
 		// Black pieces
-		{ EModel::Rook,   glm::vec3(-3.5f, 0.0f,-3.5f), glm::vec3(0.1f), false }, // A8
-		{ EModel::Knight, glm::vec3(-2.5f, 0.0f,-3.5f), glm::vec3(0.1f), false }, // B8
-		{ EModel::Bishop, glm::vec3(-1.5f, 0.0f,-3.5f), glm::vec3(0.1f), false }, // C8
-		{ EModel::Queen,  glm::vec3(-0.5f, 0.0f,-3.5f), glm::vec3(0.1f), false }, // D8
-		{ EModel::King,   glm::vec3( 0.5f, 0.0f,-3.5f), glm::vec3(0.1f), false }, // E8
-		{ EModel::Bishop, glm::vec3( 1.5f, 0.0f,-3.5f), glm::vec3(0.1f), false }, // F8
-		{ EModel::Knight, glm::vec3( 2.5f, 0.0f,-3.5f), glm::vec3(0.1f), false }, // G8
-		{ EModel::Rook,   glm::vec3( 3.5f, 0.0f,-3.5f), glm::vec3(0.1f), false }, // H8
-		{ EModel::Pawn,   glm::vec3(-3.5f, 0.0f,-2.5f), glm::vec3(0.1f), false }, // A7
-		{ EModel::Pawn,   glm::vec3(-2.5f, 0.0f,-2.5f), glm::vec3(0.1f), false }, // B7
-		{ EModel::Pawn,   glm::vec3(-1.5f, 0.0f,-2.5f), glm::vec3(0.1f), false }, // C7
-		{ EModel::Pawn,   glm::vec3(-0.5f, 0.0f,-2.5f), glm::vec3(0.1f), false }, // D7
-		{ EModel::Pawn,   glm::vec3( 0.5f, 0.0f,-2.5f), glm::vec3(0.1f), false }, // E7
-		{ EModel::Pawn,   glm::vec3( 1.5f, 0.0f,-2.5f), glm::vec3(0.1f), false }, // F7
-		{ EModel::Pawn,   glm::vec3( 2.5f, 0.0f,-2.5f), glm::vec3(0.1f), false }, // G7
-		{ EModel::Pawn,   glm::vec3( 3.5f, 0.0f,-2.5f), glm::vec3(0.1f), false }, // H7
+		{ EModel::Rook,   glm::vec3(-3.5f, 0.0f,-3.5f), VK_FALSE, VK_FALSE }, // A8
+		{ EModel::Knight, glm::vec3(-2.5f, 0.0f,-3.5f), VK_FALSE, VK_FALSE }, // B8
+		{ EModel::Bishop, glm::vec3(-1.5f, 0.0f,-3.5f), VK_FALSE, VK_FALSE }, // C8
+		{ EModel::Queen,  glm::vec3(-0.5f, 0.0f,-3.5f), VK_FALSE, VK_FALSE }, // D8
+		{ EModel::King,   glm::vec3( 0.5f, 0.0f,-3.5f), VK_FALSE, VK_FALSE }, // E8
+		{ EModel::Bishop, glm::vec3( 1.5f, 0.0f,-3.5f), VK_FALSE, VK_FALSE }, // F8
+		{ EModel::Knight, glm::vec3( 2.5f, 0.0f,-3.5f), VK_FALSE, VK_FALSE }, // G8
+		{ EModel::Rook,   glm::vec3( 3.5f, 0.0f,-3.5f), VK_FALSE, VK_FALSE }, // H8
+		{ EModel::Pawn,   glm::vec3(-3.5f, 0.0f,-2.5f), VK_FALSE, VK_FALSE }, // A7
+		{ EModel::Pawn,   glm::vec3(-2.5f, 0.0f,-2.5f), VK_FALSE, VK_FALSE }, // B7
+		{ EModel::Pawn,   glm::vec3(-1.5f, 0.0f,-2.5f), VK_FALSE, VK_FALSE }, // C7
+		{ EModel::Pawn,   glm::vec3(-0.5f, 0.0f,-2.5f), VK_FALSE, VK_FALSE }, // D7
+		{ EModel::Pawn,   glm::vec3( 0.5f, 0.0f,-2.5f), VK_FALSE, VK_FALSE }, // E7
+		{ EModel::Pawn,   glm::vec3( 1.5f, 0.0f,-2.5f), VK_FALSE, VK_FALSE }, // F7
+		{ EModel::Pawn,   glm::vec3( 2.5f, 0.0f,-2.5f), VK_FALSE, VK_FALSE }, // G7
+		{ EModel::Pawn,   glm::vec3( 3.5f, 0.0f,-2.5f), VK_FALSE, VK_FALSE }, // H7
 	};
 
 	// Render each model in the scene.
@@ -1120,11 +1120,11 @@ void WizardChess::RecordCommandBuffer(VkCommandBuffer commandBuffer, uint32_t im
 		constants.model = glm::mat4(1.0);
 		constants.model *= m_mouseRotateMat;
 		constants.model = glm::translate(constants.model, modelDrawInfo.position);
-		
+
 		constants.model = constants.model * model->ModelMatrix();
 
-		// Set the color for the current model.
-		constants.color = modelDrawInfo.color;
+		// Set the bool for white pieces.
+		constants.isWhite = modelDrawInfo.isWhite;
 
 		// Whether to use texture for this model.
 		constants.useTexture = modelDrawInfo.useTexture;
@@ -1183,8 +1183,11 @@ void WizardChess::UpdateUniformBuffer(uint32_t currentImage, int modelIndex)
 {
 	auto swapChainExtent = VK.SurfaceManager()->SwapChainExtent();
 
+	glm::vec3 eye = glm::vec3(0.0f, 8.0f, 10.0f);
+
 	UniformBufferObjectVs uboVs{};
-	uboVs.view = glm::lookAt(glm::vec3(0.0f, 8.0f, 10.0f), // eye
+	uboVs.view = glm::lookAt(
+		eye,                          // eye
 		glm::vec3(0.0f, -0.5f, 0.0f), // target
 		glm::vec3(0.0f, 1.0f, 0.0f)); // up vector
 	uboVs.proj = glm::perspective(glm::radians(45.0f), swapChainExtent.width / (float)swapChainExtent.height, 0.1f, 20.0f);
@@ -1196,9 +1199,9 @@ void WizardChess::UpdateUniformBuffer(uint32_t currentImage, int modelIndex)
 
 	UniformBufferObjectFs uboFs{};
 
-	uboFs.lightPos   = glm::vec3(1.0, 0.0, 0.0);
-	uboFs.lightColor = glm::vec3(0.0, 1.0, 0.0);
-	uboFs.cameraPos  = glm::vec3(0.0, 0.0, 1.0);
+	uboFs.lightPos   = glm::vec3(-5.0, 0.0, 0.0);
+	uboFs.lightColor = glm::vec3( 1.0, 1.0, 1.0);
+	uboFs.cameraPos  = eye;
 
 	memcpy(m_uniformBuffersFsMapped[currentImage], &uboFs, sizeof(uboFs));
 }

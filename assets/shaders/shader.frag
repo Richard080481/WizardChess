@@ -4,7 +4,7 @@ layout(push_constant) uniform PushConstants
 {
     mat4 model;
     mat4 normailzeMatrix;
-    vec3 color;
+    bool isWhite;
     bool useTexture;
 } pc;
 
@@ -20,6 +20,7 @@ layout(binding = 2) uniform UniformBufferObjectFs
 layout(location = 0) in vec3 fragColor;
 layout(location = 1) in vec2 fragTexCoord;
 layout(location = 2) in vec3 fragNormal;
+layout(location = 3) in vec3 fragPosition;
 
 layout(location = 0) out vec4 outColor;
 
@@ -31,8 +32,34 @@ void main()
     }
     else
     {
-        // outColor = vec4(pc.color, 1.0);
-        vec3 v3Normal = fragNormal * 0.5 + 0.5;
-        outColor = vec4(ubo.cameraPos, 1.0);
+        vec3 N = normalize(fragNormal);
+        vec3 L = normalize(ubo.lightPos - fragPosition);
+        vec3 V = normalize(ubo.cameraPos - fragPosition);
+        vec3 R = reflect(-L, N);
+
+        // Ambient lighting
+        float ambientStrength = 0.01;
+        vec3 ambient = ambientStrength * ubo.lightColor;
+
+        // Diffuse lighting (Lambertian reflection)
+        float diffuseStrength = 1.0;
+        float diff = max(dot(N, L), 0.0);
+        vec3 diffuse = diff * ubo.lightColor * diffuseStrength;
+
+        // Specular lighting (Phong reflection model)
+        float specularStrength = 100;
+        float shininess = 32.0;
+        float spec = pow(max(dot(V, R), 0.0), shininess);
+        vec3 specular = specularStrength * spec * ubo.lightColor;
+
+        vec3 lighting = ambient + diffuse + specular;
+        vec3 color = fragColor;
+
+        if (!pc.isWhite)
+        {
+            color = color * 0.03;
+        }
+        // Color Mode - Apply lighting to vertex color
+        outColor = vec4(lighting * color, 1.0);
     }
 }
