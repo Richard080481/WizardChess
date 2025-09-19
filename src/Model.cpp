@@ -71,6 +71,8 @@ void Model::Load(std::string fileNmae)
     m_boundaries[4] = attrib.vertices[2];
     m_boundaries[5] = attrib.vertices[2];
 
+    static constexpr bool usePositionAsColor = false;
+
     for (const auto& shape : shapes)
     {
         for (const auto& index : shape.mesh.indices)
@@ -100,7 +102,14 @@ void Model::Load(std::string fileNmae)
                 };
             }
 
-            vertex.color = { vertex.pos[0], vertex.pos[1], vertex.pos[2] };
+            if (usePositionAsColor)
+            {
+                vertex.color = {vertex.pos[0], vertex.pos[1], vertex.pos[2]};
+            }
+            else
+            {
+                vertex.color = {1.0, 1.0, 1.0};
+            }
 
             m_indices.push_back(m_vertices.size());
             m_vertices.push_back(vertex);
@@ -115,12 +124,14 @@ void Model::Load(std::string fileNmae)
     m_normalizeMatrix = glm::translate(m_normalizeMatrix, -glm::vec3((m_boundaries[0] + m_boundaries[1]) / 2,
                                                                      (m_boundaries[2] + m_boundaries[3]) / 2,
                                                                      (m_boundaries[4] + m_boundaries[5]) / 2));
-
-    for (auto& vertex : m_vertices)
+    if (usePositionAsColor)
     {
-        vertex.color[0] = (vertex.color[0] - m_boundaries[0]) / (m_boundaries[1] - m_boundaries[0]);
-        vertex.color[1] = (vertex.color[1] - m_boundaries[2]) / (m_boundaries[3] - m_boundaries[2]);
-        vertex.color[2] = (vertex.color[2] - m_boundaries[4]) / (m_boundaries[5] - m_boundaries[4]);
+        for (auto& vertex : m_vertices)
+        {
+            vertex.color[0] = (vertex.color[0] - m_boundaries[0]) / (m_boundaries[1] - m_boundaries[0]);
+            vertex.color[1] = (vertex.color[1] - m_boundaries[2]) / (m_boundaries[3] - m_boundaries[2]);
+            vertex.color[2] = (vertex.color[2] - m_boundaries[4]) / (m_boundaries[5] - m_boundaries[4]);
+        }
     }
 
     ComputeSmoothNormals(m_indices, m_vertices);
