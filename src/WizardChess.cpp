@@ -62,8 +62,8 @@ enum ETexture : unsigned int
 
 enum EShader : unsigned int
 {
-	Vert = 0,
-	Frag = 1,
+	VertRender = 0,
+	FragRender = 1,
 };
 
 static inline std::string GetModelPaths(enum EModel index)
@@ -97,8 +97,8 @@ static inline std::string GetShaderPaths(enum EShader index)
 {
 	static constexpr char* shaderFileNames[] =
 	{
-		"vert.spv",
-		"frag.spv",
+		"vertRender.spv",
+		"fragRender.spv",
 	};
 
 	return COMPILED_SHADER_ROOT + std::string(shaderFileNames[index]);
@@ -246,7 +246,7 @@ void WizardChess::InitVulkan()
 	CreateDescriptorSetLayout();
 
 	// Create the graphics pipeline, which configures shaders, input assembly, viewport, and other rendering states.
-	CreateGraphicsPipeline();
+	CreateGraphicsPipelineRender();
 
 	// Create resources for depth buffering, allowing proper handling of 3D object occlusion.
 	CreateDepthResources();
@@ -317,7 +317,7 @@ void WizardChess::Cleanup()
 	CleanupSwapChain();
 
 	VkDevice device = VK.Device();
-	vkDestroyPipeline(device, m_graphicsPipeline, nullptr);
+	vkDestroyPipeline(device, m_graphicsPipelineRender, nullptr);
 	vkDestroyPipelineLayout(device, m_pipelineLayout, nullptr);
 	vkDestroyRenderPass(device, m_renderPass, nullptr);
 
@@ -464,10 +464,10 @@ void WizardChess::CreateDescriptorSetLayout()
 	}
 }
 
-void WizardChess::CreateGraphicsPipeline()
+void WizardChess::CreateGraphicsPipelineRender()
 {
-	auto vertShaderCode = ReadFile(GetShaderPaths(EShader::Vert));
-	auto fragShaderCode = ReadFile(GetShaderPaths(EShader::Frag));
+	auto vertShaderCode = ReadFile(GetShaderPaths(EShader::VertRender));
+	auto fragShaderCode = ReadFile(GetShaderPaths(EShader::FragRender));
 
 	VkShaderModule vertShaderModule = CreateShaderModule(vertShaderCode);
 	VkShaderModule fragShaderModule = CreateShaderModule(fragShaderCode);
@@ -589,7 +589,7 @@ void WizardChess::CreateGraphicsPipeline()
     pipelineInfo.subpass                = 0;
     pipelineInfo.basePipelineHandle     = VK_NULL_HANDLE;
 
-	if (vkCreateGraphicsPipelines(VK.Device(), VK_NULL_HANDLE, 1, &pipelineInfo, nullptr, &m_graphicsPipeline) != VK_SUCCESS)
+	if (vkCreateGraphicsPipelines(VK.Device(), VK_NULL_HANDLE, 1, &pipelineInfo, nullptr, &m_graphicsPipelineRender) != VK_SUCCESS)
 	{
 		throw std::runtime_error("failed to create graphics pipeline!");
 	}
@@ -1032,7 +1032,7 @@ void WizardChess::RecordCommandBuffer(VkCommandBuffer commandBuffer, uint32_t im
 	vkCmdBeginRenderPass(commandBuffer, &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
 
 	// Bind the graphics pipeline to the command buffer.
-	vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_graphicsPipeline);
+	vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_graphicsPipelineRender);
 
 	// Set the viewport, defining the dimensions and depth range of the render area.
 	VkViewport viewport{};
