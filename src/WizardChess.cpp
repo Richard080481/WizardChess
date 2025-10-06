@@ -580,7 +580,7 @@ void WizardChess::CreateGraphicsPipelines()
 	VkPushConstantRange pushConstantRange{};
     pushConstantRange.offset        = 0;
     pushConstantRange.size          = sizeof(ModelPushConstants);
-    pushConstantRange.stageFlags    = VK_SHADER_STAGE_VERTEX_BIT;
+    pushConstantRange.stageFlags    = VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT;
 
 	VkPipelineLayoutCreateInfo pipelineLayoutInfo{};
     pipelineLayoutInfo.sType                    = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
@@ -1185,7 +1185,7 @@ void WizardChess::RecordCommandBuffer(VkCommandBuffer commandBuffer, uint32_t im
 
 		// Pass the normalization matrix to the shaders.
 		constants.normailzeMatrix = model->NormalizeMatrix();
-		vkCmdPushConstants(commandBuffer, m_pipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(ModelPushConstants), &constants);
+		vkCmdPushConstants(commandBuffer, m_pipelineLayout, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(ModelPushConstants), &constants);
 
 		// Issue a draw command for the indexed geometry of the model.
 		vkCmdDrawIndexed(commandBuffer, static_cast<uint32_t>(model->Indices()), 1, 0, 0, 0);

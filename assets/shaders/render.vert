@@ -20,7 +20,9 @@ layout(location = 3) out vec3 fragPosition;
 layout( push_constant ) uniform constants
 {
     mat4 model;
-	mat4 normailzeMatrix;
+    mat4 normailzeMatrix;
+    bool isWhite;
+    bool useTexture;
 } pushConstant;
 
 void main()
