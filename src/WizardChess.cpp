@@ -108,13 +108,26 @@ static inline std::string GetShaderPaths(enum EShader index)
 	return COMPILED_SHADER_ROOT + std::string(shaderFileNames[index]);
 }
 
-struct UniformBufferObjectVs
+struct UniformBufferObjectVsRender
 {
 	alignas(16) glm::mat4 view;
 	alignas(16) glm::mat4 proj;
 };
 
-struct UniformBufferObjectFs
+struct UniformBufferObjectFsRender
+{
+	alignas(16) glm::vec3 lightPos;
+	alignas(16) glm::vec3 lightColor;
+	alignas(16) glm::vec3 cameraPos;
+};
+
+struct UniformBufferObjectVsShadow
+{
+	alignas(16) glm::mat4 view;
+	alignas(16) glm::mat4 proj;
+};
+
+struct UniformBufferObjectFsShadow
 {
 	alignas(16) glm::vec3 lightPos;
 	alignas(16) glm::vec3 lightColor;
@@ -271,13 +284,15 @@ void WizardChess::InitVulkan()
 	LoadModel();
 
 	// Create uniform buffers to hold per-frame data like transformation matrices.
-	CreateUniformBuffers();
+	CreateRenderUniformBuffers();
+	CreateShadowUniformBuffers();
 
 	// Create a descriptor pool, which allocates resources for descriptor sets.
 	CreateDescriptorPool();
 
-	// Allocate and configure descriptor sets, which link shaders to resources like textures and buffers.
-	CreateDescriptorSets();
+	// Allocate and configure descriptor sets, which link Render shaders to resources like textures and buffers.
+	CreateDescriptorSetsRender();
+	CreateDescriptorSetsShadow();
 
 	// Create synchronization objects (semaphores and fences) to manage rendering and presentation.
 	CreateSyncObjects();
@@ -322,17 +337,24 @@ void WizardChess::Cleanup()
 
 	VkDevice device = VK.Device();
 	vkDestroyPipeline(device, m_graphicsPipelineRender, nullptr);
+	vkDestroyPipelineLayout(device, m_pipelineLayoutRender, nullptr);
 	vkDestroyPipeline(device, m_graphicsPipelineShadow, nullptr);
-	vkDestroyPipelineLayout(device, m_pipelineLayout, nullptr);
+	vkDestroyPipelineLayout(device, m_pipelineLayoutShadow, nullptr);
 	vkDestroyRenderPass(device, m_renderPass, nullptr);
 
 	for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++)
 	{
-		vkDestroyBuffer(device, m_uniformBuffersVs[i], nullptr);
-		vkFreeMemory(device, m_uniformBuffersVsMemory[i], nullptr);
+		vkDestroyBuffer(device, m_uniformBuffersVsRender[i], nullptr);
+		vkFreeMemory(device, m_uniformBuffersVsRenderMemory[i], nullptr);
 
-		vkDestroyBuffer(device, m_uniformBuffersFs[i], nullptr);
-		vkFreeMemory(device, m_uniformBuffersFsMemory[i], nullptr);
+		vkDestroyBuffer(device, m_uniformBuffersFsRender[i], nullptr);
+		vkFreeMemory(device, m_uniformBuffersFsRenderMemory[i], nullptr);
+
+		vkDestroyBuffer(device, m_uniformBuffersVsShadow[i], nullptr);
+		vkFreeMemory(device, m_uniformBuffersVsShadowMemory[i], nullptr);
+
+		vkDestroyBuffer(device, m_uniformBuffersFsShadow[i], nullptr);
+		vkFreeMemory(device, m_uniformBuffersFsShadowMemory[i], nullptr);
 	}
 
 	vkDestroyDescriptorPool(device, m_descriptorPool, nullptr);
@@ -343,7 +365,8 @@ void WizardChess::Cleanup()
 	vkDestroyImage(device, m_textureImage, nullptr);
 	vkFreeMemory(device, m_textureImageMemory, nullptr);
 
-	vkDestroyDescriptorSetLayout(device, m_descriptorSetLayout, nullptr);
+	vkDestroyDescriptorSetLayout(device, m_descriptorSetLayoutRender, nullptr);
+	vkDestroyDescriptorSetLayout(device, m_descriptorSetLayoutShadow, nullptr);
 
 	for (Model*& pModel : m_models)
 	{
@@ -436,34 +459,68 @@ void WizardChess::CreateRenderPass()
 
 void WizardChess::CreateDescriptorSetLayout()
 {
-	VkDescriptorSetLayoutBinding uboVsLayoutBinding{};
-    uboVsLayoutBinding.binding              = 0;
-    uboVsLayoutBinding.descriptorCount      = 1;
-    uboVsLayoutBinding.descriptorType       = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-    uboVsLayoutBinding.pImmutableSamplers   = nullptr;
-    uboVsLayoutBinding.stageFlags           = VK_SHADER_STAGE_VERTEX_BIT;
+	VkDescriptorSetLayoutBinding uboVsLayoutBindingRender{};
+    uboVsLayoutBindingRender.binding              = 0;
+    uboVsLayoutBindingRender.descriptorCount      = 1;
+    uboVsLayoutBindingRender.descriptorType       = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+    uboVsLayoutBindingRender.pImmutableSamplers   = nullptr;
+    uboVsLayoutBindingRender.stageFlags           = VK_SHADER_STAGE_VERTEX_BIT;
 
-	VkDescriptorSetLayoutBinding samplerLayoutBinding{};
-    samplerLayoutBinding.binding            = 1;
-    samplerLayoutBinding.descriptorCount    = 1;
-    samplerLayoutBinding.descriptorType     = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-	samplerLayoutBinding.pImmutableSamplers = nullptr;
-    samplerLayoutBinding.stageFlags         = VK_SHADER_STAGE_FRAGMENT_BIT;
+	VkDescriptorSetLayoutBinding samplerLayoutBindingRender{};
+    samplerLayoutBindingRender.binding            = 1;
+    samplerLayoutBindingRender.descriptorCount    = 1;
+    samplerLayoutBindingRender.descriptorType     = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+	samplerLayoutBindingRender.pImmutableSamplers = nullptr;
+    samplerLayoutBindingRender.stageFlags         = VK_SHADER_STAGE_FRAGMENT_BIT;
 
-	VkDescriptorSetLayoutBinding uboFsLayoutBinding{};
-    uboFsLayoutBinding.binding              = 2;
-    uboFsLayoutBinding.descriptorCount      = 1;
-    uboFsLayoutBinding.descriptorType       = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-    uboFsLayoutBinding.pImmutableSamplers   = nullptr;
-    uboFsLayoutBinding.stageFlags           = VK_SHADER_STAGE_FRAGMENT_BIT;
+	VkDescriptorSetLayoutBinding uboFsLayoutBindingRender{};
+    uboFsLayoutBindingRender.binding              = 2;
+    uboFsLayoutBindingRender.descriptorCount      = 1;
+    uboFsLayoutBindingRender.descriptorType       = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+    uboFsLayoutBindingRender.pImmutableSamplers   = nullptr;
+    uboFsLayoutBindingRender.stageFlags           = VK_SHADER_STAGE_FRAGMENT_BIT;
 
-	std::array<VkDescriptorSetLayoutBinding, 3> bindings = { uboVsLayoutBinding, samplerLayoutBinding, uboFsLayoutBinding };
-	VkDescriptorSetLayoutCreateInfo layoutInfo{};
-    layoutInfo.sType                        = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
-    layoutInfo.bindingCount                 = static_cast<uint32_t>(bindings.size());
-    layoutInfo.pBindings                    = bindings.data();
+	std::array<VkDescriptorSetLayoutBinding, 3> renderBindings = { uboVsLayoutBindingRender, samplerLayoutBindingRender, uboFsLayoutBindingRender };
 
-	if (vkCreateDescriptorSetLayout(VK.Device(), &layoutInfo, nullptr, &m_descriptorSetLayout) != VK_SUCCESS)
+	VkDescriptorSetLayoutCreateInfo layoutInfoRender{};
+	layoutInfoRender.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+	layoutInfoRender.bindingCount = static_cast<uint32_t>(renderBindings.size());
+	layoutInfoRender.pBindings = renderBindings.data();
+
+	if (vkCreateDescriptorSetLayout(VK.Device(), &layoutInfoRender, nullptr, &m_descriptorSetLayoutRender) != VK_SUCCESS)
+	{
+		throw std::runtime_error("failed to create descriptor set layout!");
+	}
+
+	VkDescriptorSetLayoutBinding uboVsLayoutBindingShadow{};
+	uboVsLayoutBindingShadow.binding              = 0;
+	uboVsLayoutBindingShadow.descriptorCount      = 1;
+	uboVsLayoutBindingShadow.descriptorType       = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+	uboVsLayoutBindingShadow.pImmutableSamplers   = nullptr;
+	uboVsLayoutBindingShadow.stageFlags           = VK_SHADER_STAGE_VERTEX_BIT;
+
+	VkDescriptorSetLayoutBinding samplerLayoutBindingShadow{};
+	samplerLayoutBindingShadow.binding            = 1;
+	samplerLayoutBindingShadow.descriptorCount    = 1;
+	samplerLayoutBindingShadow.descriptorType     = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+	samplerLayoutBindingShadow.pImmutableSamplers = nullptr;
+	samplerLayoutBindingShadow.stageFlags         = VK_SHADER_STAGE_FRAGMENT_BIT;
+
+	VkDescriptorSetLayoutBinding uboFsLayoutBindingShadow{};
+	uboFsLayoutBindingShadow.binding              = 2;
+	uboFsLayoutBindingShadow.descriptorCount      = 1;
+	uboFsLayoutBindingShadow.descriptorType       = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+	uboFsLayoutBindingShadow.pImmutableSamplers   = nullptr;
+	uboFsLayoutBindingShadow.stageFlags           = VK_SHADER_STAGE_FRAGMENT_BIT;
+
+	std::array<VkDescriptorSetLayoutBinding, 3> shadowBindings = { uboVsLayoutBindingShadow, samplerLayoutBindingShadow, uboFsLayoutBindingShadow };
+
+	VkDescriptorSetLayoutCreateInfo layoutInfoShadow{};
+    layoutInfoShadow.sType                        = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+    layoutInfoShadow.bindingCount                 = static_cast<uint32_t>(shadowBindings.size());
+    layoutInfoShadow.pBindings                    = shadowBindings.data();
+
+	if (vkCreateDescriptorSetLayout(VK.Device(), &layoutInfoShadow, nullptr, &m_descriptorSetLayoutShadow) != VK_SUCCESS)
 	{
 		throw std::runtime_error("failed to create descriptor set layout!");
 	}
@@ -582,14 +639,26 @@ void WizardChess::CreateGraphicsPipelines()
     pushConstantRange.size          = sizeof(ModelPushConstants);
     pushConstantRange.stageFlags    = VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT;
 
-	VkPipelineLayoutCreateInfo pipelineLayoutInfo{};
-    pipelineLayoutInfo.sType                    = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
-    pipelineLayoutInfo.setLayoutCount           = 1;
-    pipelineLayoutInfo.pSetLayouts              = &m_descriptorSetLayout;
-    pipelineLayoutInfo.pushConstantRangeCount   = 1;
-    pipelineLayoutInfo.pPushConstantRanges      = &pushConstantRange;
+	VkPipelineLayoutCreateInfo pipelineLayoutInfoRender{};
+    pipelineLayoutInfoRender.sType                    = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
+    pipelineLayoutInfoRender.setLayoutCount           = 1;
+    pipelineLayoutInfoRender.pSetLayouts              = &m_descriptorSetLayoutRender;
+    pipelineLayoutInfoRender.pushConstantRangeCount   = 1;
+    pipelineLayoutInfoRender.pPushConstantRanges      = &pushConstantRange;
 
-	if (vkCreatePipelineLayout(VK.Device(), &pipelineLayoutInfo, nullptr, &m_pipelineLayout) != VK_SUCCESS)
+	VkPipelineLayoutCreateInfo pipelineLayoutInfoShadow{};
+	pipelineLayoutInfoShadow.sType                    = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
+	pipelineLayoutInfoShadow.setLayoutCount           = 1;
+	pipelineLayoutInfoShadow.pSetLayouts              = &m_descriptorSetLayoutShadow;
+	pipelineLayoutInfoShadow.pushConstantRangeCount   = 1;
+	pipelineLayoutInfoShadow.pPushConstantRanges      = &pushConstantRange;
+
+	if (vkCreatePipelineLayout(VK.Device(), &pipelineLayoutInfoRender, nullptr, &m_pipelineLayoutRender) != VK_SUCCESS)
+	{
+		throw std::runtime_error("failed to create pipeline layout!");
+	}
+
+	if (vkCreatePipelineLayout(VK.Device(), &pipelineLayoutInfoShadow, nullptr, &m_pipelineLayoutShadow) != VK_SUCCESS)
 	{
 		throw std::runtime_error("failed to create pipeline layout!");
 	}
@@ -606,7 +675,7 @@ void WizardChess::CreateGraphicsPipelines()
     pipelineRenderInfo.pDepthStencilState     = &depthStencil;
     pipelineRenderInfo.pColorBlendState       = &colorBlending;
     pipelineRenderInfo.pDynamicState          = &dynamicState;
-    pipelineRenderInfo.layout                 = m_pipelineLayout;
+    pipelineRenderInfo.layout                 = m_pipelineLayoutRender;
     pipelineRenderInfo.renderPass             = m_renderPass;
     pipelineRenderInfo.subpass                = 0;
     pipelineRenderInfo.basePipelineHandle     = VK_NULL_HANDLE;
@@ -623,7 +692,7 @@ void WizardChess::CreateGraphicsPipelines()
     pipelineShadowInfo.pDepthStencilState     = &depthStencil;
     pipelineShadowInfo.pColorBlendState       = &colorBlending;
     pipelineShadowInfo.pDynamicState          = &dynamicState;
-    pipelineShadowInfo.layout                 = m_pipelineLayout;
+    pipelineShadowInfo.layout                 = m_pipelineLayoutShadow;
     pipelineShadowInfo.renderPass             = m_renderPass;
     pipelineShadowInfo.subpass                = 0;
     pipelineShadowInfo.basePipelineHandle     = VK_NULL_HANDLE;
@@ -936,30 +1005,57 @@ void WizardChess::LoadModel()
 	}
 }
 
-void WizardChess::CreateUniformBuffers()
+void WizardChess::CreateRenderUniformBuffers()
 {
-	VkDeviceSize bufferSizeVs = sizeof(UniformBufferObjectVs);
-	m_uniformBuffersVs.resize(MAX_FRAMES_IN_FLIGHT);
-	m_uniformBuffersVsMemory.resize(MAX_FRAMES_IN_FLIGHT);
-	m_uniformBuffersVsMapped.resize(MAX_FRAMES_IN_FLIGHT);
+	VkDeviceSize bufferSizeVs = sizeof(UniformBufferObjectVsRender);
+	m_uniformBuffersVsRender.resize(MAX_FRAMES_IN_FLIGHT);
+	m_uniformBuffersVsRenderMemory.resize(MAX_FRAMES_IN_FLIGHT);
+	m_uniformBuffersVsRenderMapped.resize(MAX_FRAMES_IN_FLIGHT);
 
 	for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++)
 	{
-		CreateBuffer(bufferSizeVs, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, m_uniformBuffersVs[i], m_uniformBuffersVsMemory[i]);
+		CreateBuffer(bufferSizeVs, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, m_uniformBuffersVsRender[i], m_uniformBuffersVsRenderMemory[i]);
 
-		vkMapMemory(VK.Device(), m_uniformBuffersVsMemory[i], 0, bufferSizeVs, 0, &m_uniformBuffersVsMapped[i]);
+		vkMapMemory(VK.Device(), m_uniformBuffersVsRenderMemory[i], 0, bufferSizeVs, 0, &m_uniformBuffersVsRenderMapped[i]);
 	}
 
-	VkDeviceSize bufferSizeFs = sizeof(UniformBufferObjectFs);
-	m_uniformBuffersFs.resize(MAX_FRAMES_IN_FLIGHT);
-	m_uniformBuffersFsMemory.resize(MAX_FRAMES_IN_FLIGHT);
-	m_uniformBuffersFsMapped.resize(MAX_FRAMES_IN_FLIGHT);
+	VkDeviceSize bufferSizeFs = sizeof(UniformBufferObjectFsRender);
+	m_uniformBuffersFsRender.resize(MAX_FRAMES_IN_FLIGHT);
+	m_uniformBuffersFsRenderMemory.resize(MAX_FRAMES_IN_FLIGHT);
+	m_uniformBuffersFsRenderMapped.resize(MAX_FRAMES_IN_FLIGHT);
 
 	for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++)
 	{
-		CreateBuffer(bufferSizeFs, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, m_uniformBuffersFs[i], m_uniformBuffersFsMemory[i]);
+		CreateBuffer(bufferSizeFs, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, m_uniformBuffersFsRender[i], m_uniformBuffersFsRenderMemory[i]);
 
-		vkMapMemory(VK.Device(), m_uniformBuffersFsMemory[i], 0, bufferSizeFs, 0, &m_uniformBuffersFsMapped[i]);
+		vkMapMemory(VK.Device(), m_uniformBuffersFsRenderMemory[i], 0, bufferSizeFs, 0, &m_uniformBuffersFsRenderMapped[i]);
+	}
+}
+
+void WizardChess::CreateShadowUniformBuffers()
+{
+	VkDeviceSize bufferSizeVs = sizeof(UniformBufferObjectVsShadow);
+	m_uniformBuffersVsShadow.resize(MAX_FRAMES_IN_FLIGHT);
+	m_uniformBuffersVsShadowMemory.resize(MAX_FRAMES_IN_FLIGHT);
+	m_uniformBuffersVsShadowMapped.resize(MAX_FRAMES_IN_FLIGHT);
+
+	for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++)
+	{
+		CreateBuffer(bufferSizeVs, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, m_uniformBuffersVsShadow[i], m_uniformBuffersVsShadowMemory[i]);
+
+		vkMapMemory(VK.Device(), m_uniformBuffersVsShadowMemory[i], 0, bufferSizeVs, 0, &m_uniformBuffersVsShadowMapped[i]);
+	}
+
+	VkDeviceSize bufferSizeFs = sizeof(UniformBufferObjectFsShadow);
+	m_uniformBuffersFsShadow.resize(MAX_FRAMES_IN_FLIGHT);
+	m_uniformBuffersFsShadowMemory.resize(MAX_FRAMES_IN_FLIGHT);
+	m_uniformBuffersFsShadowMapped.resize(MAX_FRAMES_IN_FLIGHT);
+
+	for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++)
+	{
+		CreateBuffer(bufferSizeFs, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, m_uniformBuffersFsShadow[i], m_uniformBuffersFsShadowMemory[i]);
+
+		vkMapMemory(VK.Device(), m_uniformBuffersFsShadowMemory[i], 0, bufferSizeFs, 0, &m_uniformBuffersFsShadowMapped[i]);
 	}
 }
 
@@ -967,15 +1063,15 @@ void WizardChess::CreateDescriptorPool()
 {
 	std::array<VkDescriptorPoolSize, 2> poolSizes{};
     poolSizes[0].type            = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-	poolSizes[0].descriptorCount = static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT) * 2;
+	poolSizes[0].descriptorCount = static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT) * 2 * 2; // 2 for vs and fs, another 2 for render and shadow
     poolSizes[1].type            = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-	poolSizes[1].descriptorCount = static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT);
+	poolSizes[1].descriptorCount = static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT) * 2;     // 2 for render and shadow
 
 	VkDescriptorPoolCreateInfo poolInfo{};
     poolInfo.sType         = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
 	poolInfo.poolSizeCount = static_cast<uint32_t>(poolSizes.size());
     poolInfo.pPoolSizes    = poolSizes.data();
-    poolInfo.maxSets       = static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT);
+    poolInfo.maxSets       = static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT) * 2;           // 2 for render and shadow
 
 	if (vkCreateDescriptorPool(VK.Device(), &poolInfo, nullptr, &m_descriptorPool) != VK_SUCCESS)
 	{
@@ -983,17 +1079,17 @@ void WizardChess::CreateDescriptorPool()
 	}
 }
 
-void WizardChess::CreateDescriptorSets()
+void WizardChess::CreateDescriptorSetsRender()
 {
-	std::vector<VkDescriptorSetLayout> layouts(MAX_FRAMES_IN_FLIGHT, m_descriptorSetLayout);
+	std::vector<VkDescriptorSetLayout> layouts(MAX_FRAMES_IN_FLIGHT, m_descriptorSetLayoutRender);
 	VkDescriptorSetAllocateInfo allocInfo{};
     allocInfo.sType              = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
     allocInfo.descriptorPool     = m_descriptorPool;
 	allocInfo.descriptorSetCount = static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT);
     allocInfo.pSetLayouts        = layouts.data();
 
-	m_descriptorSets.resize(MAX_FRAMES_IN_FLIGHT);
-	if (vkAllocateDescriptorSets(VK.Device(), &allocInfo, m_descriptorSets.data()) != VK_SUCCESS)
+	m_descriptorSetsRender.resize(MAX_FRAMES_IN_FLIGHT);
+	if (vkAllocateDescriptorSets(VK.Device(), &allocInfo, m_descriptorSetsRender.data()) != VK_SUCCESS)
 	{
 		throw std::runtime_error("failed to allocate descriptor sets!");
 	}
@@ -1001,9 +1097,9 @@ void WizardChess::CreateDescriptorSets()
 	for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++)
 	{
 		VkDescriptorBufferInfo bufferInfoUboVs{};
-		bufferInfoUboVs.buffer = m_uniformBuffersVs[i];
+		bufferInfoUboVs.buffer = m_uniformBuffersVsRender[i];
 		bufferInfoUboVs.offset = 0;
-        bufferInfoUboVs.range  = sizeof(UniformBufferObjectVs);
+        bufferInfoUboVs.range  = sizeof(UniformBufferObjectVsRender);
 
 		VkDescriptorImageInfo imageInfo{};
 		imageInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
@@ -1011,14 +1107,14 @@ void WizardChess::CreateDescriptorSets()
         imageInfo.sampler     = m_textureSampler;
 
 		VkDescriptorBufferInfo bufferInfoUboFs{};
-		bufferInfoUboFs.buffer = m_uniformBuffersFs[i];
+		bufferInfoUboFs.buffer = m_uniformBuffersFsRender[i];
 		bufferInfoUboFs.offset = 0;
-		bufferInfoUboFs.range  = sizeof(UniformBufferObjectFs);
+		bufferInfoUboFs.range  = sizeof(UniformBufferObjectFsRender);
 
 		std::array<VkWriteDescriptorSet, 3> descriptorWrites{};
 
         descriptorWrites[0].sType           = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-        descriptorWrites[0].dstSet          = m_descriptorSets[i];
+        descriptorWrites[0].dstSet          = m_descriptorSetsRender[i];
         descriptorWrites[0].dstBinding      = 0;
 		descriptorWrites[0].dstArrayElement = 0;
         descriptorWrites[0].descriptorType  = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
@@ -1026,7 +1122,7 @@ void WizardChess::CreateDescriptorSets()
         descriptorWrites[0].pBufferInfo     = &bufferInfoUboVs;
 
         descriptorWrites[1].sType           = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-        descriptorWrites[1].dstSet          = m_descriptorSets[i];
+        descriptorWrites[1].dstSet          = m_descriptorSetsRender[i];
         descriptorWrites[1].dstBinding      = 1;
 		descriptorWrites[1].dstArrayElement = 0;
         descriptorWrites[1].descriptorType  = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
@@ -1034,7 +1130,68 @@ void WizardChess::CreateDescriptorSets()
         descriptorWrites[1].pImageInfo      = &imageInfo;
 
 		descriptorWrites[2].sType           = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-        descriptorWrites[2].dstSet          = m_descriptorSets[i];
+        descriptorWrites[2].dstSet          = m_descriptorSetsRender[i];
+        descriptorWrites[2].dstBinding      = 2;
+		descriptorWrites[2].dstArrayElement = 0;
+        descriptorWrites[2].descriptorType  = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+		descriptorWrites[2].descriptorCount = 1;
+        descriptorWrites[2].pBufferInfo     = &bufferInfoUboFs;
+		vkUpdateDescriptorSets(VK.Device(), static_cast<uint32_t>(descriptorWrites.size()), descriptorWrites.data(), 0, nullptr);
+	}
+}
+
+void WizardChess::CreateDescriptorSetsShadow()
+{
+	std::vector<VkDescriptorSetLayout> layouts(MAX_FRAMES_IN_FLIGHT, m_descriptorSetLayoutShadow);
+	VkDescriptorSetAllocateInfo allocInfo{};
+    allocInfo.sType              = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+    allocInfo.descriptorPool     = m_descriptorPool;
+	allocInfo.descriptorSetCount = static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT);
+    allocInfo.pSetLayouts        = layouts.data();
+
+	m_descriptorSetsShadow.resize(MAX_FRAMES_IN_FLIGHT);
+	if (vkAllocateDescriptorSets(VK.Device(), &allocInfo, m_descriptorSetsShadow.data()) != VK_SUCCESS)
+	{
+		throw std::runtime_error("failed to allocate descriptor sets!");
+	}
+
+	for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++)
+	{
+		VkDescriptorBufferInfo bufferInfoUboVs{};
+		bufferInfoUboVs.buffer = m_uniformBuffersVsShadow[i];
+		bufferInfoUboVs.offset = 0;
+        bufferInfoUboVs.range  = sizeof(UniformBufferObjectVsShadow);
+
+		VkDescriptorImageInfo imageInfo{};
+		imageInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+        imageInfo.imageView   = m_textureImageView;
+        imageInfo.sampler     = m_textureSampler;
+
+		VkDescriptorBufferInfo bufferInfoUboFs{};
+		bufferInfoUboFs.buffer = m_uniformBuffersFsShadow[i];
+		bufferInfoUboFs.offset = 0;
+		bufferInfoUboFs.range  = sizeof(UniformBufferObjectFsShadow);
+
+		std::array<VkWriteDescriptorSet, 3> descriptorWrites{};
+
+        descriptorWrites[0].sType           = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+        descriptorWrites[0].dstSet          = m_descriptorSetsShadow[i];
+        descriptorWrites[0].dstBinding      = 0;
+		descriptorWrites[0].dstArrayElement = 0;
+        descriptorWrites[0].descriptorType  = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+		descriptorWrites[0].descriptorCount = 1;
+        descriptorWrites[0].pBufferInfo     = &bufferInfoUboVs;
+
+        descriptorWrites[1].sType           = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+        descriptorWrites[1].dstSet          = m_descriptorSetsShadow[i];
+        descriptorWrites[1].dstBinding      = 1;
+		descriptorWrites[1].dstArrayElement = 0;
+        descriptorWrites[1].descriptorType  = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+		descriptorWrites[1].descriptorCount = 1;
+        descriptorWrites[1].pImageInfo      = &imageInfo;
+
+		descriptorWrites[2].sType           = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+        descriptorWrites[2].dstSet          = m_descriptorSetsShadow[i];
         descriptorWrites[2].dstBinding      = 2;
 		descriptorWrites[2].dstArrayElement = 0;
         descriptorWrites[2].descriptorType  = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
@@ -1097,7 +1254,7 @@ void WizardChess::RecordCommandBuffer(VkCommandBuffer commandBuffer, uint32_t im
 	vkCmdSetScissor(commandBuffer, 0, 1, &scissor);
 
 	// Bind the descriptor set for the current frame, providing shader resources like textures and uniform buffers.
-	vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_pipelineLayout, 0, 1, &m_descriptorSets[m_currentFrame], 0, nullptr);
+	vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_pipelineLayoutRender, 0, 1, &m_descriptorSetsRender[m_currentFrame], 0, nullptr);
 
 	// Calculate elapsed time to create a dynamic rotation effect for models.
 	// static auto startTime = std::chrono::high_resolution_clock::now();
@@ -1185,7 +1342,7 @@ void WizardChess::RecordCommandBuffer(VkCommandBuffer commandBuffer, uint32_t im
 
 		// Pass the normalization matrix to the shaders.
 		constants.normailzeMatrix = model->NormalizeMatrix();
-		vkCmdPushConstants(commandBuffer, m_pipelineLayout, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(ModelPushConstants), &constants);
+		vkCmdPushConstants(commandBuffer, m_pipelineLayoutRender, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(ModelPushConstants), &constants);
 
 		// Issue a draw command for the indexed geometry of the model.
 		vkCmdDrawIndexed(commandBuffer, static_cast<uint32_t>(model->Indices()), 1, 0, 0, 0);
@@ -1231,25 +1388,45 @@ void WizardChess::UpdateUniformBuffer(uint32_t currentImage, int modelIndex)
 
 	glm::vec3 eye = glm::vec3(0.0f, 8.0f, 10.0f);
 
-	UniformBufferObjectVs uboVs{};
-	uboVs.view = glm::lookAt(
+	UniformBufferObjectVsRender uboVsRender{};
+	uboVsRender.view = glm::lookAt(
 		eye,                          // eye
 		glm::vec3(0.0f, -0.5f, 0.0f), // target
 		glm::vec3(0.0f, 1.0f, 0.0f)); // up vector
-	uboVs.proj = glm::perspective(glm::radians(45.0f), swapChainExtent.width / (float)swapChainExtent.height, 0.1f, 20.0f);
+	uboVsRender.proj = glm::perspective(glm::radians(45.0f), swapChainExtent.width / (float)swapChainExtent.height, 0.1f, 20.0f);
 
 	// Vulkan's y-axis is pointing downwards.
-	uboVs.proj[1][1] *= -1;
+	uboVsRender.proj[1][1] *= -1;
 
-	memcpy(m_uniformBuffersVsMapped[currentImage], &uboVs, sizeof(uboVs));
+	memcpy(m_uniformBuffersVsRenderMapped[currentImage], &uboVsRender, sizeof(uboVsRender));
 
-	UniformBufferObjectFs uboFs{};
+	UniformBufferObjectFsRender uboFsRender{};
 
-	uboFs.lightPos   = glm::vec3(-5.0, 0.0, 0.0);
-	uboFs.lightColor = glm::vec3( 1.0, 1.0, 1.0);
-	uboFs.cameraPos  = eye;
+	uboFsRender.lightPos   = glm::vec3(-5.0, 0.0, 0.0);
+	uboFsRender.lightColor = glm::vec3( 1.0, 1.0, 1.0);
+	uboFsRender.cameraPos  = eye;
 
-	memcpy(m_uniformBuffersFsMapped[currentImage], &uboFs, sizeof(uboFs));
+	memcpy(m_uniformBuffersFsRenderMapped[currentImage], &uboFsRender, sizeof(uboFsRender));
+
+	UniformBufferObjectVsShadow uboVsShadow{};
+	uboVsShadow.view = glm::lookAt(
+		eye,                          // eye
+		glm::vec3(0.0f, -0.5f, 0.0f), // target
+		glm::vec3(0.0f, 1.0f, 0.0f)); // up vector
+	uboVsShadow.proj = glm::perspective(glm::radians(45.0f), swapChainExtent.width / (float)swapChainExtent.height, 0.1f, 20.0f);
+
+	// Vulkan's y-axis is pointing downwards.
+	uboVsShadow.proj[1][1] *= -1;
+
+	memcpy(m_uniformBuffersVsShadowMapped[currentImage], &uboVsShadow, sizeof(uboVsShadow));
+
+	UniformBufferObjectFsShadow uboFsShadow{};
+
+	uboFsShadow.lightPos = glm::vec3(-5.0, 0.0, 0.0);
+	uboFsShadow.lightColor = glm::vec3(1.0, 1.0, 1.0);
+	uboFsShadow.cameraPos = eye;
+
+	memcpy(m_uniformBuffersFsShadowMapped[currentImage], &uboFsShadow, sizeof(uboFsShadow));
 }
 
 void WizardChess::DrawFrame()

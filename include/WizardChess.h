@@ -50,9 +50,11 @@ private:
     void     CreateImage(uint32_t width, uint32_t height, VkFormat format, VkImageTiling tiling, VkImageUsageFlags usage, VkMemoryPropertyFlags properties, VkImage& image, VkDeviceMemory& imageMemory);
     void     TransitionImageLayout(VkImage image, VkFormat format, VkImageLayout oldLayout, VkImageLayout newLayout);
     void     LoadModel();
-    void     CreateUniformBuffers();
+    void     CreateRenderUniformBuffers();
+    void     CreateShadowUniformBuffers();
     void     CreateDescriptorPool();
-    void     CreateDescriptorSets();
+    void     CreateDescriptorSetsRender();
+    void     CreateDescriptorSetsShadow();
     void     RecordCommandBuffer(VkCommandBuffer commandBuffer, uint32_t imageIndex);
     void     CreateSyncObjects();
     void     UpdateUniformBuffer(uint32_t currentImage, int modelIndex);
@@ -64,8 +66,10 @@ private:
     std::vector<VkFramebuffer> m_swapChainFramebuffers;
 
     VkRenderPass            m_renderPass = VK_NULL_HANDLE;
-    VkDescriptorSetLayout   m_descriptorSetLayout;
-    VkPipelineLayout        m_pipelineLayout;
+    VkDescriptorSetLayout   m_descriptorSetLayoutRender;
+    VkDescriptorSetLayout   m_descriptorSetLayoutShadow;
+    VkPipelineLayout        m_pipelineLayoutRender;
+    VkPipelineLayout        m_pipelineLayoutShadow;
     VkPipeline              m_graphicsPipelineRender;
     VkPipeline              m_graphicsPipelineShadow;
 
@@ -80,16 +84,25 @@ private:
 
     std::vector<Model*>     m_models;
 
-    std::vector<VkBuffer>       m_uniformBuffersVs;
-    std::vector<VkDeviceMemory> m_uniformBuffersVsMemory;
-    std::vector<void*>          m_uniformBuffersVsMapped;
+    std::vector<VkBuffer>       m_uniformBuffersVsRender;
+    std::vector<VkDeviceMemory> m_uniformBuffersVsRenderMemory;
+    std::vector<void*>          m_uniformBuffersVsRenderMapped;
 
-    std::vector<VkBuffer>       m_uniformBuffersFs;
-    std::vector<VkDeviceMemory> m_uniformBuffersFsMemory;
-    std::vector<void*>          m_uniformBuffersFsMapped;
+    std::vector<VkBuffer>       m_uniformBuffersFsRender;
+    std::vector<VkDeviceMemory> m_uniformBuffersFsRenderMemory;
+    std::vector<void*>          m_uniformBuffersFsRenderMapped;
+
+    std::vector<VkBuffer>       m_uniformBuffersVsShadow;
+    std::vector<VkDeviceMemory> m_uniformBuffersVsShadowMemory;
+    std::vector<void*>          m_uniformBuffersVsShadowMapped;
+
+    std::vector<VkBuffer>       m_uniformBuffersFsShadow;
+    std::vector<VkDeviceMemory> m_uniformBuffersFsShadowMemory;
+    std::vector<void*>          m_uniformBuffersFsShadowMapped;
 
     VkDescriptorPool             m_descriptorPool;
-    std::vector<VkDescriptorSet> m_descriptorSets;
+    std::vector<VkDescriptorSet> m_descriptorSetsRender;
+    std::vector<VkDescriptorSet> m_descriptorSetsShadow;
 
     std::vector<VkCommandBuffer> m_commandBuffers;
 
