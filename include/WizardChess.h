@@ -38,7 +38,7 @@ private:
     void     RecreateSwapChain();
     void     CreateRenderPass();
     void     CreateDescriptorSetLayout();
-    void     CreateGraphicsPipelineRender();
+    void     CreateGraphicsPipelines();
     void     CreateFramebuffers();
     void     CreateDepthResources();
     VkFormat FindSupportedFormat(const std::vector<VkFormat>& candidates, VkImageTiling tiling, VkFormatFeatureFlags features);
@@ -67,6 +67,7 @@ private:
     VkDescriptorSetLayout   m_descriptorSetLayout;
     VkPipelineLayout        m_pipelineLayout;
     VkPipeline              m_graphicsPipelineRender;
+    VkPipeline              m_graphicsPipelineShadow;
 
     VkImage                 m_depthImage;
     VkDeviceMemory          m_depthImageMemory;

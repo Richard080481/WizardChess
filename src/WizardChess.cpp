@@ -64,6 +64,8 @@ enum EShader : unsigned int
 {
 	VertRender = 0,
 	FragRender = 1,
+	VertShadow = 2,
+	FragShadow = 3,
 };
 
 static inline std::string GetModelPaths(enum EModel index)
@@ -99,6 +101,8 @@ static inline std::string GetShaderPaths(enum EShader index)
 	{
 		"vertRender.spv",
 		"fragRender.spv",
+		"vertShadow.spv",
+		"fragShadow.spv",
 	};
 
 	return COMPILED_SHADER_ROOT + std::string(shaderFileNames[index]);
@@ -246,7 +250,7 @@ void WizardChess::InitVulkan()
 	CreateDescriptorSetLayout();
 
 	// Create the graphics pipeline, which configures shaders, input assembly, viewport, and other rendering states.
-	CreateGraphicsPipelineRender();
+	CreateGraphicsPipelines();
 
 	// Create resources for depth buffering, allowing proper handling of 3D object occlusion.
 	CreateDepthResources();
@@ -318,6 +322,7 @@ void WizardChess::Cleanup()
 
 	VkDevice device = VK.Device();
 	vkDestroyPipeline(device, m_graphicsPipelineRender, nullptr);
+	vkDestroyPipeline(device, m_graphicsPipelineShadow, nullptr);
 	vkDestroyPipelineLayout(device, m_pipelineLayout, nullptr);
 	vkDestroyRenderPass(device, m_renderPass, nullptr);
 
@@ -464,27 +469,44 @@ void WizardChess::CreateDescriptorSetLayout()
 	}
 }
 
-void WizardChess::CreateGraphicsPipelineRender()
+void WizardChess::CreateGraphicsPipelines()
 {
-	auto vertShaderCode = ReadFile(GetShaderPaths(EShader::VertRender));
-	auto fragShaderCode = ReadFile(GetShaderPaths(EShader::FragRender));
+	auto vertRenderCode = ReadFile(GetShaderPaths(EShader::VertRender));
+	auto fragRenderCode = ReadFile(GetShaderPaths(EShader::FragRender));
+	auto vertShadowCode = ReadFile(GetShaderPaths(EShader::VertShadow));
+	auto fragShadowCode = ReadFile(GetShaderPaths(EShader::FragShadow));
 
-	VkShaderModule vertShaderModule = CreateShaderModule(vertShaderCode);
-	VkShaderModule fragShaderModule = CreateShaderModule(fragShaderCode);
+	VkShaderModule vertRenderModule = CreateShaderModule(vertRenderCode);
+	VkShaderModule fragRenderModule = CreateShaderModule(fragRenderCode);
+	VkShaderModule vertShadowModule = CreateShaderModule(vertShadowCode);
+	VkShaderModule fragShadowModule = CreateShaderModule(fragShadowCode);
 
-	VkPipelineShaderStageCreateInfo vertShaderStageInfo{};
-    vertShaderStageInfo.sType  = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
-    vertShaderStageInfo.stage  = VK_SHADER_STAGE_VERTEX_BIT;
-	vertShaderStageInfo.module = vertShaderModule;
-    vertShaderStageInfo.pName  = "main";
+	VkPipelineShaderStageCreateInfo vertRenderStageInfo{};
+    vertRenderStageInfo.sType  = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+    vertRenderStageInfo.stage  = VK_SHADER_STAGE_VERTEX_BIT;
+	vertRenderStageInfo.module = vertRenderModule;
+    vertRenderStageInfo.pName  = "main";
 
-	VkPipelineShaderStageCreateInfo fragShaderStageInfo{};
-    fragShaderStageInfo.sType  = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
-    fragShaderStageInfo.stage  = VK_SHADER_STAGE_FRAGMENT_BIT;
-	fragShaderStageInfo.module = fragShaderModule;
-    fragShaderStageInfo.pName  = "main";
+	VkPipelineShaderStageCreateInfo fragRenderStageInfo{};
+    fragRenderStageInfo.sType  = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+    fragRenderStageInfo.stage  = VK_SHADER_STAGE_FRAGMENT_BIT;
+	fragRenderStageInfo.module = fragRenderModule;
+    fragRenderStageInfo.pName  = "main";
 
-	VkPipelineShaderStageCreateInfo shaderStages[] = { vertShaderStageInfo, fragShaderStageInfo };
+	VkPipelineShaderStageCreateInfo vertShadowStageInfo{};
+	vertShadowStageInfo.sType  = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+	vertShadowStageInfo.stage  = VK_SHADER_STAGE_VERTEX_BIT;
+	vertShadowStageInfo.module = vertShadowModule;
+	vertShadowStageInfo.pName  = "main";
+
+	VkPipelineShaderStageCreateInfo fragShadowStageInfo{};
+	fragShadowStageInfo.sType  = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+	fragShadowStageInfo.stage  = VK_SHADER_STAGE_FRAGMENT_BIT;
+	fragShadowStageInfo.module = fragShadowModule;
+	fragShadowStageInfo.pName  = "main";
+
+	VkPipelineShaderStageCreateInfo renderStages[] = { vertRenderStageInfo, fragRenderStageInfo };
+	VkPipelineShaderStageCreateInfo shadowStages[] = { vertShadowStageInfo, fragShadowStageInfo };
 
 	VkPipelineVertexInputStateCreateInfo vertexInputInfo{};
 	vertexInputInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
@@ -572,30 +594,54 @@ void WizardChess::CreateGraphicsPipelineRender()
 		throw std::runtime_error("failed to create pipeline layout!");
 	}
 
-	VkGraphicsPipelineCreateInfo pipelineInfo{};
-    pipelineInfo.sType                  = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
-    pipelineInfo.stageCount             = 2;
-    pipelineInfo.pStages                = shaderStages;
-    pipelineInfo.pVertexInputState      = &vertexInputInfo;
-    pipelineInfo.pInputAssemblyState    = &inputAssembly;
-    pipelineInfo.pViewportState         = &viewportState;
-    pipelineInfo.pRasterizationState    = &rasterizer;
-    pipelineInfo.pMultisampleState      = &multisampling;
-    pipelineInfo.pDepthStencilState     = &depthStencil;
-    pipelineInfo.pColorBlendState       = &colorBlending;
-    pipelineInfo.pDynamicState          = &dynamicState;
-    pipelineInfo.layout                 = m_pipelineLayout;
-    pipelineInfo.renderPass             = m_renderPass;
-    pipelineInfo.subpass                = 0;
-    pipelineInfo.basePipelineHandle     = VK_NULL_HANDLE;
+	VkGraphicsPipelineCreateInfo pipelineRenderInfo{};
+    pipelineRenderInfo.sType                  = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
+    pipelineRenderInfo.stageCount             = 2;
+    pipelineRenderInfo.pStages                = renderStages;
+    pipelineRenderInfo.pVertexInputState      = &vertexInputInfo;
+    pipelineRenderInfo.pInputAssemblyState    = &inputAssembly;
+    pipelineRenderInfo.pViewportState         = &viewportState;
+    pipelineRenderInfo.pRasterizationState    = &rasterizer;
+    pipelineRenderInfo.pMultisampleState      = &multisampling;
+    pipelineRenderInfo.pDepthStencilState     = &depthStencil;
+    pipelineRenderInfo.pColorBlendState       = &colorBlending;
+    pipelineRenderInfo.pDynamicState          = &dynamicState;
+    pipelineRenderInfo.layout                 = m_pipelineLayout;
+    pipelineRenderInfo.renderPass             = m_renderPass;
+    pipelineRenderInfo.subpass                = 0;
+    pipelineRenderInfo.basePipelineHandle     = VK_NULL_HANDLE;
 
-	if (vkCreateGraphicsPipelines(VK.Device(), VK_NULL_HANDLE, 1, &pipelineInfo, nullptr, &m_graphicsPipelineRender) != VK_SUCCESS)
+	VkGraphicsPipelineCreateInfo pipelineShadowInfo{};
+    pipelineShadowInfo.sType                  = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
+    pipelineShadowInfo.stageCount             = 2;
+    pipelineShadowInfo.pStages                = shadowStages;
+    pipelineShadowInfo.pVertexInputState      = &vertexInputInfo;
+    pipelineShadowInfo.pInputAssemblyState    = &inputAssembly;
+    pipelineShadowInfo.pViewportState         = &viewportState;
+    pipelineShadowInfo.pRasterizationState    = &rasterizer;
+    pipelineShadowInfo.pMultisampleState      = &multisampling;
+    pipelineShadowInfo.pDepthStencilState     = &depthStencil;
+    pipelineShadowInfo.pColorBlendState       = &colorBlending;
+    pipelineShadowInfo.pDynamicState          = &dynamicState;
+    pipelineShadowInfo.layout                 = m_pipelineLayout;
+    pipelineShadowInfo.renderPass             = m_renderPass;
+    pipelineShadowInfo.subpass                = 0;
+    pipelineShadowInfo.basePipelineHandle     = VK_NULL_HANDLE;
+
+	if (vkCreateGraphicsPipelines(VK.Device(), VK_NULL_HANDLE, 1, &pipelineRenderInfo, nullptr, &m_graphicsPipelineRender) != VK_SUCCESS)
 	{
-		throw std::runtime_error("failed to create graphics pipeline!");
+		throw std::runtime_error("failed to create render graphics pipeline!");
 	}
 
-	vkDestroyShaderModule(VK.Device(), fragShaderModule, nullptr);
-	vkDestroyShaderModule(VK.Device(), vertShaderModule, nullptr);
+	if (vkCreateGraphicsPipelines(VK.Device(), VK_NULL_HANDLE, 1, &pipelineShadowInfo, nullptr, &m_graphicsPipelineShadow) != VK_SUCCESS)
+	{
+		throw std::runtime_error("failed to create shadow graphics pipeline!");
+	}
+
+	vkDestroyShaderModule(VK.Device(), fragRenderModule, nullptr);
+	vkDestroyShaderModule(VK.Device(), vertRenderModule, nullptr);
+	vkDestroyShaderModule(VK.Device(), fragShadowModule, nullptr);
+	vkDestroyShaderModule(VK.Device(), vertShadowModule, nullptr);
 }
 
 void WizardChess::CreateFramebuffers()

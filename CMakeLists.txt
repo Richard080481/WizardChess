@@ -34,11 +34,15 @@ set(HEADER_FILES
 set(SHADER_SOURCE_FILES
     ${CMAKE_SOURCE_DIR}/assets/shaders/render.frag
     ${CMAKE_SOURCE_DIR}/assets/shaders/render.vert
+    ${CMAKE_SOURCE_DIR}/assets/shaders/shadow.frag
+    ${CMAKE_SOURCE_DIR}/assets/shaders/shadow.vert
 )
 
 set(SHADER_OUTPUT_FILES
     ${CMAKE_BINARY_DIR}/compiled_shaders/fragRender.spv
     ${CMAKE_BINARY_DIR}/compiled_shaders/vertRender.spv
+    ${CMAKE_BINARY_DIR}/compiled_shaders/fragShadow.spv
+    ${CMAKE_BINARY_DIR}/compiled_shaders/vertShadow.spv
 )
 
 # Organize shader files in the Visual Studio solution
@@ -49,6 +53,8 @@ add_custom_command(
     OUTPUT ${SHADER_OUTPUT_FILES}
     COMMAND ${CMAKE_SOURCE_DIR}/assets/shaders/compile.bat ${CMAKE_SOURCE_DIR}/assets/shaders/render.frag ${CMAKE_BINARY_DIR}/compiled_shaders/fragRender.spv
     COMMAND ${CMAKE_SOURCE_DIR}/assets/shaders/compile.bat ${CMAKE_SOURCE_DIR}/assets/shaders/render.vert ${CMAKE_BINARY_DIR}/compiled_shaders/vertRender.spv
+    COMMAND ${CMAKE_SOURCE_DIR}/assets/shaders/compile.bat ${CMAKE_SOURCE_DIR}/assets/shaders/shadow.frag ${CMAKE_BINARY_DIR}/compiled_shaders/fragShadow.spv
+    COMMAND ${CMAKE_SOURCE_DIR}/assets/shaders/compile.bat ${CMAKE_SOURCE_DIR}/assets/shaders/shadow.vert ${CMAKE_BINARY_DIR}/compiled_shaders/vertShadow.spv
     DEPENDS ${SHADER_SOURCE_FILES}
     COMMENT "Compiling shaders into ${CMAKE_BINARY_DIR}/compiled_shaders"
 )
