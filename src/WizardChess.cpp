@@ -108,32 +108,6 @@ static inline std::string GetShaderPaths(enum EShader index)
     return COMPILED_SHADER_ROOT + std::string(shaderFileNames[index]);
 }
 
-struct UniformBufferObjectVsRender
-{
-    alignas(16) glm::mat4 view;
-    alignas(16) glm::mat4 proj;
-};
-
-struct UniformBufferObjectFsRender
-{
-    alignas(16) glm::vec3 lightPos;
-    alignas(16) glm::vec3 lightColor;
-    alignas(16) glm::vec3 cameraPos;
-};
-
-struct UniformBufferObjectVsShadow
-{
-    alignas(16) glm::mat4 view;
-    alignas(16) glm::mat4 proj;
-};
-
-struct UniformBufferObjectFsShadow
-{
-    alignas(16) glm::vec3 lightPos;
-    alignas(16) glm::vec3 lightColor;
-    alignas(16) glm::vec3 cameraPos;
-};
-
 const int MAX_FRAMES_IN_FLIGHT = 2;
 
 const std::vector<const char*> g_deviceExtensions =
@@ -259,6 +233,9 @@ void WizardChess::InitVulkan()
     // Create the render pass, defining how rendering operations interact with framebuffers.
     CreateRenderPass();
 
+    // Create resources and pipeline for shadow mapping.
+    CreateShadowPass();
+
     // Set up the descriptor set layout, which specifies how shaders access resources like uniforms and textures.
     CreateDescriptorSetLayout();
 
@@ -266,10 +243,12 @@ void WizardChess::InitVulkan()
     CreateGraphicsPipelines();
 
     // Create resources for depth buffering, allowing proper handling of 3D object occlusion.
-    CreateDepthResources();
+    CreateDepthResourcesRender();
+    CreateDepthResourcesShadow();
 
     // Create framebuffers, which represent the render targets for each swap chain image.
-    CreateFramebuffers();
+    CreateRenderFramebuffer();
+    CreateShadowFramebuffer();
 
     // Load and create a texture image from file.
     CreateTextureImage();
@@ -313,11 +292,20 @@ void WizardChess::MainLoop()
 void WizardChess::CleanupSwapChain()
 {
     VkDevice device = VK.Device();
-    vkDestroyImageView(device, m_depthImageView, nullptr);
-    vkDestroyImage(device, m_depthImage, nullptr);
-    vkFreeMemory(device, m_depthImageMemory, nullptr);
+    vkDestroyImageView(device, m_renderDepthImageView, nullptr);
+    vkDestroyImage(device, m_renderDepthImage, nullptr);
+    vkFreeMemory(device, m_renderDepthImageMemory, nullptr);
 
-    for (auto framebuffer : m_swapChainFramebuffers)
+    for (auto framebuffer : m_swapChainRenderFramebuffers)
+    {
+        vkDestroyFramebuffer(device, framebuffer, nullptr);
+    }
+
+    vkDestroyImageView(device, m_shadowDepthImageView, nullptr);
+    vkDestroyImage(device, m_shadowDepthImage, nullptr);
+    vkFreeMemory(device, m_shadowDepthImageMemory, nullptr);
+
+    for (auto framebuffer : m_swapChainShadowFramebuffers)
     {
         vkDestroyFramebuffer(device, framebuffer, nullptr);
     }
@@ -341,6 +329,7 @@ void WizardChess::Cleanup()
     vkDestroyPipeline(device, m_graphicsPipelineShadow, nullptr);
     vkDestroyPipelineLayout(device, m_pipelineLayoutShadow, nullptr);
     vkDestroyRenderPass(device, m_renderPass, nullptr);
+    vkDestroyRenderPass(device, m_shadowPass, nullptr);
 
     for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++)
     {
@@ -393,8 +382,8 @@ void WizardChess::RecreateSwapChain()
     CleanupSwapChain();
 
     VK.CreateSwapChain();
-    CreateDepthResources();
-    CreateFramebuffers();
+    CreateDepthResourcesRender();
+    CreateRenderFramebuffer();
 }
 
 void WizardChess::CreateRenderPass()
@@ -454,6 +443,66 @@ void WizardChess::CreateRenderPass()
     if (vkCreateRenderPass(VK.Device(), &renderPassInfo, nullptr, &m_renderPass) != VK_SUCCESS)
     {
         throw std::runtime_error("failed to create render pass!");
+    }
+}
+
+void WizardChess::CreateShadowPass()
+{
+    VkAttachmentDescription colorAttachment{};
+    colorAttachment.format          = VK.SurfaceManager()->SwapChainImageFormat();
+    colorAttachment.samples         = VK_SAMPLE_COUNT_1_BIT;
+    colorAttachment.loadOp          = VK_ATTACHMENT_LOAD_OP_CLEAR;
+    colorAttachment.storeOp         = VK_ATTACHMENT_STORE_OP_STORE;
+    colorAttachment.stencilLoadOp   = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+    colorAttachment.stencilStoreOp  = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+    colorAttachment.initialLayout   = VK_IMAGE_LAYOUT_UNDEFINED;
+    colorAttachment.finalLayout     = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
+
+    VkAttachmentDescription depthAttachment{};
+    depthAttachment.format          = FindDepthFormat();
+    depthAttachment.samples         = VK_SAMPLE_COUNT_1_BIT;
+    depthAttachment.loadOp          = VK_ATTACHMENT_LOAD_OP_CLEAR;
+    depthAttachment.storeOp         = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+    depthAttachment.stencilLoadOp   = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+    depthAttachment.stencilStoreOp  = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+    depthAttachment.initialLayout   = VK_IMAGE_LAYOUT_UNDEFINED;
+    depthAttachment.finalLayout     = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+
+    VkAttachmentReference colorAttachmentRef{};
+    colorAttachmentRef.attachment   = 0;
+    colorAttachmentRef.layout       = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+
+    VkAttachmentReference depthAttachmentRef{};
+    depthAttachmentRef.attachment   = 1;
+    depthAttachmentRef.layout       = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+
+    VkSubpassDescription subpass{};
+    subpass.pipelineBindPoint       = VK_PIPELINE_BIND_POINT_GRAPHICS;
+    subpass.colorAttachmentCount    = 1;
+    subpass.pColorAttachments       = &colorAttachmentRef;
+    subpass.pDepthStencilAttachment = &depthAttachmentRef;
+
+    VkSubpassDependency dependency{};
+    dependency.srcSubpass           = VK_SUBPASS_EXTERNAL;
+    dependency.dstSubpass           = 0;
+    dependency.srcStageMask         = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT | VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT;
+    dependency.srcAccessMask        = 0;
+    dependency.dstStageMask         = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT | VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT;
+    dependency.dstAccessMask        = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT | VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+
+    std::array<VkAttachmentDescription, 2> attachments = { colorAttachment, depthAttachment };
+    VkRenderPassCreateInfo renderPassInfo{};
+    renderPassInfo.sType            = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
+    renderPassInfo.attachmentCount  = static_cast<uint32_t>(attachments.size());
+    renderPassInfo.pAttachments     = attachments.data();
+    renderPassInfo.subpassCount     = 1;
+    renderPassInfo.pSubpasses       = &subpass;
+    renderPassInfo.dependencyCount  = 1;
+    renderPassInfo.pDependencies    = &dependency;
+
+    if (vkCreateRenderPass(VK.Device(), &renderPassInfo, nullptr, &m_shadowPass) != VK_SUCCESS)
+    {
+        throw std::runtime_error("failed to create shadow pass!");
     }
 }
 
@@ -565,16 +614,26 @@ void WizardChess::CreateGraphicsPipelines()
     VkPipelineShaderStageCreateInfo renderStages[] = { vertRenderStageInfo, fragRenderStageInfo };
     VkPipelineShaderStageCreateInfo shadowStages[] = { vertShadowStageInfo, fragShadowStageInfo };
 
-    VkPipelineVertexInputStateCreateInfo vertexInputInfo{};
-    vertexInputInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
+    VkPipelineVertexInputStateCreateInfo vertexInputInfoRender{};
+    vertexInputInfoRender.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
 
     auto bindingDescription    = Vertex::GetBindingDescription();
-    auto attributeDescriptions = Vertex::GetAttributeDescriptions();
+    auto renderAttributeDescriptions = Vertex::GetAttributeDescriptions();
 
-    vertexInputInfo.vertexBindingDescriptionCount   = 1;
-    vertexInputInfo.vertexAttributeDescriptionCount = static_cast<uint32_t>(attributeDescriptions.size());
-    vertexInputInfo.pVertexBindingDescriptions      = &bindingDescription;
-    vertexInputInfo.pVertexAttributeDescriptions    = attributeDescriptions.data();
+    vertexInputInfoRender.vertexBindingDescriptionCount   = 1;
+    vertexInputInfoRender.vertexAttributeDescriptionCount = static_cast<uint32_t>(renderAttributeDescriptions.size());
+    vertexInputInfoRender.pVertexBindingDescriptions      = &bindingDescription;
+    vertexInputInfoRender.pVertexAttributeDescriptions    = renderAttributeDescriptions.data();
+
+    VkPipelineVertexInputStateCreateInfo vertexInputInfoShadow{};
+    vertexInputInfoShadow.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
+
+    auto shadowAttributeDescriptions = Vertex::GetAttributeDescriptions();
+
+    vertexInputInfoShadow.vertexBindingDescriptionCount   = 1;
+    vertexInputInfoShadow.vertexAttributeDescriptionCount = static_cast<uint32_t>(shadowAttributeDescriptions.size());
+    vertexInputInfoShadow.pVertexBindingDescriptions      = &bindingDescription;
+    vertexInputInfoShadow.pVertexAttributeDescriptions    = shadowAttributeDescriptions.data();
 
     VkPipelineInputAssemblyStateCreateInfo inputAssembly{};
     inputAssembly.sType                  = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
@@ -613,16 +672,27 @@ void WizardChess::CreateGraphicsPipelines()
     colorBlendAttachment.colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
     colorBlendAttachment.blendEnable    = VK_FALSE;
 
-    VkPipelineColorBlendStateCreateInfo colorBlending{};
-    colorBlending.sType                 = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
-    colorBlending.logicOpEnable         = VK_FALSE;
-    colorBlending.logicOp               = VK_LOGIC_OP_COPY;
-    colorBlending.attachmentCount       = 1;
-    colorBlending.pAttachments          = &colorBlendAttachment;
-    colorBlending.blendConstants[0]     = 0.0f;
-    colorBlending.blendConstants[1]     = 0.0f;
-    colorBlending.blendConstants[2]     = 0.0f;
-    colorBlending.blendConstants[3]     = 0.0f;
+    VkPipelineColorBlendStateCreateInfo colorBlendingRender{};
+    colorBlendingRender.sType             = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
+    colorBlendingRender.logicOpEnable     = VK_FALSE;
+    colorBlendingRender.logicOp           = VK_LOGIC_OP_COPY;
+    colorBlendingRender.attachmentCount   = 1;
+    colorBlendingRender.pAttachments      = &colorBlendAttachment;
+    colorBlendingRender.blendConstants[0] = 0.0f;
+    colorBlendingRender.blendConstants[1] = 0.0f;
+    colorBlendingRender.blendConstants[2] = 0.0f;
+    colorBlendingRender.blendConstants[3] = 0.0f;
+
+    VkPipelineColorBlendStateCreateInfo colorBlendingShadow{};
+    colorBlendingShadow.sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
+    colorBlendingShadow.logicOpEnable     = VK_FALSE;
+    colorBlendingShadow.logicOp           = VK_LOGIC_OP_COPY;
+    colorBlendingShadow.attachmentCount   = 1;
+    colorBlendingShadow.pAttachments      = &colorBlendAttachment;
+    colorBlendingShadow.blendConstants[0] = 0.0f;
+    colorBlendingShadow.blendConstants[1] = 0.0f;
+    colorBlendingShadow.blendConstants[2] = 0.0f;
+    colorBlendingShadow.blendConstants[3] = 0.0f;
 
     std::vector<VkDynamicState> dynamicStates =
     {
@@ -630,28 +700,33 @@ void WizardChess::CreateGraphicsPipelines()
         VK_DYNAMIC_STATE_SCISSOR
     };
     VkPipelineDynamicStateCreateInfo dynamicState{};
-    dynamicState.sType              = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
-    dynamicState.dynamicStateCount  = static_cast<uint32_t>(dynamicStates.size());
-    dynamicState.pDynamicStates     = dynamicStates.data();
+    dynamicState.sType             = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
+    dynamicState.dynamicStateCount = static_cast<uint32_t>(dynamicStates.size());
+    dynamicState.pDynamicStates    = dynamicStates.data();
 
-    VkPushConstantRange pushConstantRange{};
-    pushConstantRange.offset        = 0;
-    pushConstantRange.size          = sizeof(ModelPushConstants);
-    pushConstantRange.stageFlags    = VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT;
+    VkPushConstantRange pushConstantRangeRender{};
+    pushConstantRangeRender.offset     = 0;
+    pushConstantRangeRender.size       = sizeof(RenderPushConstants);
+    pushConstantRangeRender.stageFlags = VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT;
+
+    VkPushConstantRange pushConstantRangeShadow{};
+    pushConstantRangeShadow.offset     = 0;
+    pushConstantRangeShadow.size       = sizeof(ShadowPushConstants);
+    pushConstantRangeShadow.stageFlags = VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT;
 
     VkPipelineLayoutCreateInfo pipelineLayoutInfoRender{};
-    pipelineLayoutInfoRender.sType                    = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
-    pipelineLayoutInfoRender.setLayoutCount           = 1;
-    pipelineLayoutInfoRender.pSetLayouts              = &m_descriptorSetLayoutRender;
-    pipelineLayoutInfoRender.pushConstantRangeCount   = 1;
-    pipelineLayoutInfoRender.pPushConstantRanges      = &pushConstantRange;
+    pipelineLayoutInfoRender.sType                  = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
+    pipelineLayoutInfoRender.setLayoutCount         = 1;
+    pipelineLayoutInfoRender.pSetLayouts            = &m_descriptorSetLayoutRender;
+    pipelineLayoutInfoRender.pushConstantRangeCount = 1;
+    pipelineLayoutInfoRender.pPushConstantRanges    = &pushConstantRangeRender;
 
     VkPipelineLayoutCreateInfo pipelineLayoutInfoShadow{};
-    pipelineLayoutInfoShadow.sType                    = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
-    pipelineLayoutInfoShadow.setLayoutCount           = 1;
-    pipelineLayoutInfoShadow.pSetLayouts              = &m_descriptorSetLayoutShadow;
-    pipelineLayoutInfoShadow.pushConstantRangeCount   = 1;
-    pipelineLayoutInfoShadow.pPushConstantRanges      = &pushConstantRange;
+    pipelineLayoutInfoShadow.sType                  = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
+    pipelineLayoutInfoShadow.setLayoutCount         = 1;
+    pipelineLayoutInfoShadow.pSetLayouts            = &m_descriptorSetLayoutShadow;
+    pipelineLayoutInfoShadow.pushConstantRangeCount = 1;
+    pipelineLayoutInfoShadow.pPushConstantRanges    = &pushConstantRangeShadow;
 
     if (vkCreatePipelineLayout(VK.Device(), &pipelineLayoutInfoRender, nullptr, &m_pipelineLayoutRender) != VK_SUCCESS)
     {
@@ -667,13 +742,13 @@ void WizardChess::CreateGraphicsPipelines()
     pipelineRenderInfo.sType                  = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
     pipelineRenderInfo.stageCount             = 2;
     pipelineRenderInfo.pStages                = renderStages;
-    pipelineRenderInfo.pVertexInputState      = &vertexInputInfo;
+    pipelineRenderInfo.pVertexInputState      = &vertexInputInfoRender;
     pipelineRenderInfo.pInputAssemblyState    = &inputAssembly;
     pipelineRenderInfo.pViewportState         = &viewportState;
     pipelineRenderInfo.pRasterizationState    = &rasterizer;
     pipelineRenderInfo.pMultisampleState      = &multisampling;
     pipelineRenderInfo.pDepthStencilState     = &depthStencil;
-    pipelineRenderInfo.pColorBlendState       = &colorBlending;
+    pipelineRenderInfo.pColorBlendState       = &colorBlendingRender;
     pipelineRenderInfo.pDynamicState          = &dynamicState;
     pipelineRenderInfo.layout                 = m_pipelineLayoutRender;
     pipelineRenderInfo.renderPass             = m_renderPass;
@@ -684,16 +759,16 @@ void WizardChess::CreateGraphicsPipelines()
     pipelineShadowInfo.sType                  = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
     pipelineShadowInfo.stageCount             = 2;
     pipelineShadowInfo.pStages                = shadowStages;
-    pipelineShadowInfo.pVertexInputState      = &vertexInputInfo;
+    pipelineShadowInfo.pVertexInputState      = &vertexInputInfoShadow;
     pipelineShadowInfo.pInputAssemblyState    = &inputAssembly;
     pipelineShadowInfo.pViewportState         = &viewportState;
     pipelineShadowInfo.pRasterizationState    = &rasterizer;
     pipelineShadowInfo.pMultisampleState      = &multisampling;
     pipelineShadowInfo.pDepthStencilState     = &depthStencil;
-    pipelineShadowInfo.pColorBlendState       = &colorBlending;
+    pipelineShadowInfo.pColorBlendState       = &colorBlendingShadow;
     pipelineShadowInfo.pDynamicState          = &dynamicState;
     pipelineShadowInfo.layout                 = m_pipelineLayoutShadow;
-    pipelineShadowInfo.renderPass             = m_renderPass;
+    pipelineShadowInfo.renderPass             = m_shadowPass;
     pipelineShadowInfo.subpass                = 0;
     pipelineShadowInfo.basePipelineHandle     = VK_NULL_HANDLE;
 
@@ -713,18 +788,18 @@ void WizardChess::CreateGraphicsPipelines()
     vkDestroyShaderModule(VK.Device(), vertShadowModule, nullptr);
 }
 
-void WizardChess::CreateFramebuffers()
+void WizardChess::CreateRenderFramebuffer()
 {
     auto swapChainImageViews = VK.SurfaceManager()->SwapChainImageViews();
 
-    m_swapChainFramebuffers.resize(swapChainImageViews.size());
+    m_swapChainRenderFramebuffers.resize(swapChainImageViews.size());
 
     for (size_t i = 0; i < swapChainImageViews.size(); i++)
     {
         std::array<VkImageView, 2> attachments =
         {
             swapChainImageViews[i],
-            m_depthImageView
+            m_renderDepthImageView
         };
 
         VkFramebufferCreateInfo framebufferInfo{};
@@ -738,20 +813,61 @@ void WizardChess::CreateFramebuffers()
         framebufferInfo.height  = extent.height;
         framebufferInfo.layers  = 1;
 
-        if (vkCreateFramebuffer(VK.Device(), &framebufferInfo, nullptr, &m_swapChainFramebuffers[i]) != VK_SUCCESS)
+        if (vkCreateFramebuffer(VK.Device(), &framebufferInfo, nullptr, &m_swapChainRenderFramebuffers[i]) != VK_SUCCESS)
         {
-            throw std::runtime_error("failed to create framebuffer!");
+            throw std::runtime_error("failed to create Render framebuffer!");
         }
     }
 }
 
-void WizardChess::CreateDepthResources()
+void WizardChess::CreateShadowFramebuffer()
+{
+    auto swapChainImageViews = VK.SurfaceManager()->SwapChainImageViews();
+
+    m_swapChainShadowFramebuffers.resize(swapChainImageViews.size());
+
+    for (size_t i = 0; i < swapChainImageViews.size(); i++)
+    {
+        std::array<VkImageView, 2> attachments =
+        {
+            swapChainImageViews[i],
+            m_shadowDepthImageView
+        };
+
+        VkFramebufferCreateInfo framebufferInfo{};
+        framebufferInfo.sType           = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
+        framebufferInfo.renderPass      = m_shadowPass;
+        framebufferInfo.attachmentCount = static_cast<uint32_t>(attachments.size());
+        framebufferInfo.pAttachments    = attachments.data();
+
+        auto extent = VK.SurfaceManager()->SwapChainExtent();
+        framebufferInfo.width  = extent.width;
+        framebufferInfo.height = extent.height;
+        framebufferInfo.layers = 1;
+
+        if (vkCreateFramebuffer(VK.Device(), &framebufferInfo, nullptr, &m_swapChainShadowFramebuffers[i]) != VK_SUCCESS)
+        {
+            throw std::runtime_error("failed to create Shadow framebuffer!");
+        }
+    }
+}
+
+void WizardChess::CreateDepthResourcesRender()
 {
     VkFormat depthFormat = FindDepthFormat();
 
     auto extent = VK.SurfaceManager()->SwapChainExtent();
-    CreateImage(extent.width, extent.height, depthFormat, VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, m_depthImage, m_depthImageMemory);
-    m_depthImageView = VK.CreateImageView(m_depthImage, depthFormat, VK_IMAGE_ASPECT_DEPTH_BIT);
+    CreateImage(extent.width, extent.height, depthFormat, VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, m_renderDepthImage, m_renderDepthImageMemory);
+    m_renderDepthImageView = VK.CreateImageView(m_renderDepthImage, depthFormat, VK_IMAGE_ASPECT_DEPTH_BIT);
+}
+
+void WizardChess::CreateDepthResourcesShadow()
+{
+    VkFormat depthFormat = FindDepthFormat();
+
+    auto extent = VK.SurfaceManager()->SwapChainExtent();
+    CreateImage(extent.width, extent.height, depthFormat, VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, m_shadowDepthImage, m_shadowDepthImageMemory);
+    m_shadowDepthImageView = VK.CreateImageView(m_shadowDepthImage, depthFormat, VK_IMAGE_ASPECT_DEPTH_BIT);
 }
 
 VkFormat WizardChess::FindSupportedFormat(const std::vector<VkFormat>& candidates, VkImageTiling tiling, VkFormatFeatureFlags features)
@@ -1201,7 +1317,7 @@ void WizardChess::CreateDescriptorSetsShadow()
     }
 }
 
-void WizardChess::RecordCommandBuffer(VkCommandBuffer commandBuffer, uint32_t imageIndex)
+void WizardChess::RecordRenderCommandBuffer(VkCommandBuffer commandBuffer, uint32_t imageIndex)
 {
     // Begin recording commands into the command buffer.
     VkCommandBufferBeginInfo beginInfo{};
@@ -1217,15 +1333,15 @@ void WizardChess::RecordCommandBuffer(VkCommandBuffer commandBuffer, uint32_t im
 
     // Configure the render pass begin info.
     VkRenderPassBeginInfo renderPassInfo{};
-    renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
-    renderPassInfo.renderPass = m_renderPass; // The render pass to use.
-    renderPassInfo.framebuffer = m_swapChainFramebuffers[imageIndex]; // Framebuffer for the current swap chain image.
+    renderPassInfo.sType             = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
+    renderPassInfo.renderPass        = m_renderPass; // The render pass to use.
+    renderPassInfo.framebuffer       = m_swapChainRenderFramebuffers[imageIndex]; // Framebuffer for the current swap chain image.
     renderPassInfo.renderArea.offset = { 0, 0 }; // Render area starts at the top-left corner.
     renderPassInfo.renderArea.extent = swapChainExtent; // Render area size matches the swap chain extent.
 
     // Clear values for the color and depth buffer.
     std::array<VkClearValue, 2> clearValues{};
-    clearValues[0].color = { {0.319f, 0.009f, 0.010f, 1.0f} }; // Clear color to a USC Cardinal red in SRGB.
+    clearValues[0].color        = { {0.319f, 0.009f, 0.010f, 1.0f} }; // Clear color to a USC Cardinal red in SRGB.
     clearValues[1].depthStencil = { 1.0f, 0 }; // Clear depth to 1.0 and stencil to 0.
 
     renderPassInfo.clearValueCount = static_cast<uint32_t>(clearValues.size());
@@ -1262,7 +1378,7 @@ void WizardChess::RecordCommandBuffer(VkCommandBuffer commandBuffer, uint32_t im
     // float time = std::chrono::duration<float, std::chrono::seconds::period>(currentTime - startTime).count();
 
     // Create push constants for passing small amounts of dynamic data to shaders.
-    ModelPushConstants constants{};
+    RenderPushConstants constants{};
 
     struct ModelDrawInfo
     {
@@ -1270,7 +1386,6 @@ void WizardChess::RecordCommandBuffer(VkCommandBuffer commandBuffer, uint32_t im
         glm::vec3 position;
         VkBool32  isWhite;
         VkBool32  useTexture;
-        // TODO: Add chess piece color (white or black)
     };
 
     std::vector<ModelDrawInfo> modelDrawInfos =
@@ -1342,7 +1457,163 @@ void WizardChess::RecordCommandBuffer(VkCommandBuffer commandBuffer, uint32_t im
 
         // Pass the normalization matrix to the shaders.
         constants.normailzeMatrix = model->NormalizeMatrix();
-        vkCmdPushConstants(commandBuffer, m_pipelineLayoutRender, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(ModelPushConstants), &constants);
+        vkCmdPushConstants(commandBuffer, m_pipelineLayoutRender, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(RenderPushConstants), &constants);
+
+        // Issue a draw command for the indexed geometry of the model.
+        vkCmdDrawIndexed(commandBuffer, static_cast<uint32_t>(model->Indices()), 1, 0, 0, 0);
+    }
+
+    // End the render pass.
+    vkCmdEndRenderPass(commandBuffer);
+
+    // Finalize recording the command buffer.
+    if (vkEndCommandBuffer(commandBuffer) != VK_SUCCESS)
+    {
+        throw std::runtime_error("failed to record command buffer!");
+    }
+}
+
+void WizardChess::RecordShadowCommandBuffer(VkCommandBuffer commandBuffer, uint32_t imageIndex)
+{
+    // Begin recording commands into the command buffer.
+    VkCommandBufferBeginInfo beginInfo{};
+    beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+
+    if (vkBeginCommandBuffer(commandBuffer, &beginInfo) != VK_SUCCESS)
+    {
+        throw std::runtime_error("failed to begin recording shadow command buffer!");
+    }
+
+    // Get the current swap chain extent for setting up the render area.
+    auto swapChainExtent = VK.SurfaceManager()->SwapChainExtent();
+
+    // Configure the render pass begin info.
+    VkRenderPassBeginInfo renderPassInfo{};
+    renderPassInfo.sType             = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
+    renderPassInfo.renderPass        = m_shadowPass; // The render pass to use.
+    renderPassInfo.framebuffer       = m_swapChainShadowFramebuffers[imageIndex]; // Framebuffer for the current swap chain image.
+    renderPassInfo.renderArea.offset = { 0, 0 }; // Render area starts at the top-left corner.
+    renderPassInfo.renderArea.extent = swapChainExtent; // Render area size matches the swap chain extent.
+
+    // Clear values for the color and depth buffer.
+    std::array<VkClearValue, 2> clearValues{};
+    clearValues[0].color        = { {0.319f, 0.009f, 0.010f, 1.0f} }; // Clear color to a USC Cardinal red in SRGB.
+    clearValues[1].depthStencil = { 1.0f, 0 }; // Clear depth to 1.0 and stencil to 0.
+
+    renderPassInfo.clearValueCount = static_cast<uint32_t>(clearValues.size());
+    renderPassInfo.pClearValues    = clearValues.data();
+
+    // Begin the render pass, specifying that commands will be submitted inline.
+    vkCmdBeginRenderPass(commandBuffer, &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
+
+    // Bind the graphics pipeline to the command buffer.
+    vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_graphicsPipelineShadow);
+
+    // Set the viewport, defining the dimensions and depth range of the render area.
+    VkViewport viewport{};
+    viewport.x        = 0.0f;
+    viewport.y        = 0.0f;
+    viewport.width    = (float)swapChainExtent.width;
+    viewport.height   = (float)swapChainExtent.height;
+    viewport.minDepth = 0.0f;
+    viewport.maxDepth = 1.0f;
+    vkCmdSetViewport(commandBuffer, 0, 1, &viewport);
+
+    // Set the scissor rectangle to restrict drawing to the swap chain extent.
+    VkRect2D scissor{};
+    scissor.offset = { 0, 0 };
+    scissor.extent = swapChainExtent;
+    vkCmdSetScissor(commandBuffer, 0, 1, &scissor);
+
+    // Bind the descriptor set for the current frame, providing shader resources like textures and uniform buffers.
+    vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_pipelineLayoutShadow, 0, 1, &m_descriptorSetsShadow[m_currentFrame], 0, nullptr);
+
+    // Calculate elapsed time to create a dynamic rotation effect for models.
+    // static auto startTime = std::chrono::high_resolution_clock::now();
+    // auto currentTime = std::chrono::high_resolution_clock::now();
+    // float time = std::chrono::duration<float, std::chrono::seconds::period>(currentTime - startTime).count();
+
+    // Create push constants for passing small amounts of dynamic data to shaders.
+    ShadowPushConstants constants{};
+
+    struct ModelDrawInfo
+    {
+        EModel    modelIndex;
+        glm::vec3 position;
+        VkBool32  isWhite;
+        VkBool32  useTexture;
+    };
+
+    std::vector<ModelDrawInfo> modelDrawInfos =
+    {
+        // Chessboard
+        { EModel::Cube,   glm::vec3(0.0f, 0.0f, 0.0f), VK_FALSE, VK_TRUE},
+
+        // White pieces
+        { EModel::Rook,   glm::vec3(-3.5f, 0.0f, 3.5f), VK_TRUE, VK_FALSE }, // A1
+        { EModel::Knight, glm::vec3(-2.5f, 0.0f, 3.5f), VK_TRUE, VK_FALSE }, // B1
+        { EModel::Bishop, glm::vec3(-1.5f, 0.0f, 3.5f), VK_TRUE, VK_FALSE }, // C1
+        { EModel::Queen,  glm::vec3(-0.5f, 0.0f, 3.5f), VK_TRUE, VK_FALSE }, // D1
+        { EModel::King,   glm::vec3( 0.5f, 0.0f, 3.5f), VK_TRUE, VK_FALSE }, // E1
+        { EModel::Bishop, glm::vec3( 1.5f, 0.0f, 3.5f), VK_TRUE, VK_FALSE }, // F1
+        { EModel::Knight, glm::vec3( 2.5f, 0.0f, 3.5f), VK_TRUE, VK_FALSE }, // G1
+        { EModel::Rook,   glm::vec3( 3.5f, 0.0f, 3.5f), VK_TRUE, VK_FALSE }, // H1
+        { EModel::Pawn,   glm::vec3(-3.5f, 0.0f, 2.5f), VK_TRUE, VK_FALSE }, // A2
+        { EModel::Pawn,   glm::vec3(-2.5f, 0.0f, 2.5f), VK_TRUE, VK_FALSE }, // B2
+        { EModel::Pawn,   glm::vec3(-1.5f, 0.0f, 2.5f), VK_TRUE, VK_FALSE }, // C2
+        { EModel::Pawn,   glm::vec3(-0.5f, 0.0f, 2.5f), VK_TRUE, VK_FALSE }, // D2
+        { EModel::Pawn,   glm::vec3( 0.5f, 0.0f, 2.5f), VK_TRUE, VK_FALSE }, // E2
+        { EModel::Pawn,   glm::vec3( 1.5f, 0.0f, 2.5f), VK_TRUE, VK_FALSE }, // F2
+        { EModel::Pawn,   glm::vec3( 2.5f, 0.0f, 2.5f), VK_TRUE, VK_FALSE }, // G2
+        { EModel::Pawn,   glm::vec3( 3.5f, 0.0f, 2.5f), VK_TRUE, VK_FALSE }, // H2
+
+        // Black pieces
+        { EModel::Rook,   glm::vec3(-3.5f, 0.0f,-3.5f), VK_FALSE, VK_FALSE }, // A8
+        { EModel::Knight, glm::vec3(-2.5f, 0.0f,-3.5f), VK_FALSE, VK_FALSE }, // B8
+        { EModel::Bishop, glm::vec3(-1.5f, 0.0f,-3.5f), VK_FALSE, VK_FALSE }, // C8
+        { EModel::Queen,  glm::vec3(-0.5f, 0.0f,-3.5f), VK_FALSE, VK_FALSE }, // D8
+        { EModel::King,   glm::vec3( 0.5f, 0.0f,-3.5f), VK_FALSE, VK_FALSE }, // E8
+        { EModel::Bishop, glm::vec3( 1.5f, 0.0f,-3.5f), VK_FALSE, VK_FALSE }, // F8
+        { EModel::Knight, glm::vec3( 2.5f, 0.0f,-3.5f), VK_FALSE, VK_FALSE }, // G8
+        { EModel::Rook,   glm::vec3( 3.5f, 0.0f,-3.5f), VK_FALSE, VK_FALSE }, // H8
+        { EModel::Pawn,   glm::vec3(-3.5f, 0.0f,-2.5f), VK_FALSE, VK_FALSE }, // A7
+        { EModel::Pawn,   glm::vec3(-2.5f, 0.0f,-2.5f), VK_FALSE, VK_FALSE }, // B7
+        { EModel::Pawn,   glm::vec3(-1.5f, 0.0f,-2.5f), VK_FALSE, VK_FALSE }, // C7
+        { EModel::Pawn,   glm::vec3(-0.5f, 0.0f,-2.5f), VK_FALSE, VK_FALSE }, // D7
+        { EModel::Pawn,   glm::vec3( 0.5f, 0.0f,-2.5f), VK_FALSE, VK_FALSE }, // E7
+        { EModel::Pawn,   glm::vec3( 1.5f, 0.0f,-2.5f), VK_FALSE, VK_FALSE }, // F7
+        { EModel::Pawn,   glm::vec3( 2.5f, 0.0f,-2.5f), VK_FALSE, VK_FALSE }, // G7
+        { EModel::Pawn,   glm::vec3( 3.5f, 0.0f,-2.5f), VK_FALSE, VK_FALSE }, // H7
+    };
+
+    // Render each model in the scene.
+    for (const auto& modelDrawInfo : modelDrawInfos)
+    {
+        auto model = m_models[static_cast<int>(modelDrawInfo.modelIndex)];
+        // Initialize the model matrix and apply dynamic rotation.
+        constants.model = glm::mat4(1.0);
+        constants.model *= m_mouseRotateMat;
+        constants.model = glm::translate(constants.model, modelDrawInfo.position);
+
+        constants.model = constants.model * model->ModelMatrix();
+
+        // Set the bool for white pieces.
+        constants.isWhite = modelDrawInfo.isWhite;
+
+        // Whether to use texture for this model.
+        constants.useTexture = modelDrawInfo.useTexture;
+
+        // Bind the vertex buffer for the current model.
+        VkBuffer vertexBuffers[] = { model->VertexBuffer() };
+        VkDeviceSize offsets[] = { 0 };
+        vkCmdBindVertexBuffers(commandBuffer, 0, 1, vertexBuffers, offsets);
+
+        // Bind the index buffer for the current model.
+        vkCmdBindIndexBuffer(commandBuffer, model->IndexBuffer(), 0, VK_INDEX_TYPE_UINT32);
+
+        // Pass the normalization matrix to the shaders.
+        constants.normailzeMatrix = model->NormalizeMatrix();
+        vkCmdPushConstants(commandBuffer, m_pipelineLayoutShadow, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(ShadowPushConstants), &constants);
 
         // Issue a draw command for the indexed geometry of the model.
         vkCmdDrawIndexed(commandBuffer, static_cast<uint32_t>(model->Indices()), 1, 0, 0, 0);
@@ -1453,7 +1724,9 @@ void WizardChess::DrawFrame()
     vkResetFences(VK.Device(), 1, &m_inFlightFences[m_currentFrame]);
 
     vkResetCommandBuffer(m_commandBuffers[m_currentFrame], /*VkCommandBufferResetFlagBits*/ 0);
-    RecordCommandBuffer(m_commandBuffers[m_currentFrame], imageIndex);
+    RecordRenderCommandBuffer(m_commandBuffers[m_currentFrame], imageIndex);
+    //RecordShadowCommandBuffer(m_commandBuffers[m_currentFrame], imageIndex);
+
 
     VkSubmitInfo submitInfo{};
     submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;

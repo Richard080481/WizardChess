@@ -63,12 +63,46 @@ struct Vertex
     }
 };
 
-struct ModelPushConstants
+struct RenderPushConstants
 {
     glm::mat4 model;
     glm::mat4 normailzeMatrix;
     VkBool32  isWhite;
     VkBool32  useTexture;
+};
+
+struct ShadowPushConstants
+{
+    glm::mat4 model;
+    glm::mat4 normailzeMatrix;
+    VkBool32  isWhite;
+    VkBool32  useTexture;
+};
+
+struct UniformBufferObjectVsRender
+{
+    alignas(16) glm::mat4 view;
+    alignas(16) glm::mat4 proj;
+};
+
+struct UniformBufferObjectFsRender
+{
+    alignas(16) glm::vec3 lightPos;
+    alignas(16) glm::vec3 lightColor;
+    alignas(16) glm::vec3 cameraPos;
+};
+
+struct UniformBufferObjectVsShadow
+{
+    alignas(16) glm::mat4 view;
+    alignas(16) glm::mat4 proj;
+};
+
+struct UniformBufferObjectFsShadow
+{
+    alignas(16) glm::vec3 lightPos;
+    alignas(16) glm::vec3 lightColor;
+    alignas(16) glm::vec3 cameraPos;
 };
 
 #endif // __TYPES_H__

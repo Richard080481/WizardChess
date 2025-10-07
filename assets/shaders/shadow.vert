@@ -21,6 +21,8 @@ layout( push_constant ) uniform constants
 {
     mat4 model;
     mat4 normailzeMatrix;
+    bool isWhite;
+    bool useTexture;
 } pushConstant;
 
 void main()

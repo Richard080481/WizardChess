@@ -37,10 +37,13 @@ private:
     void     Cleanup();
     void     RecreateSwapChain();
     void     CreateRenderPass();
+    void     CreateShadowPass();
     void     CreateDescriptorSetLayout();
     void     CreateGraphicsPipelines();
-    void     CreateFramebuffers();
-    void     CreateDepthResources();
+    void     CreateRenderFramebuffer();
+    void     CreateShadowFramebuffer();
+    void     CreateDepthResourcesRender();
+    void     CreateDepthResourcesShadow();
     VkFormat FindSupportedFormat(const std::vector<VkFormat>& candidates, VkImageTiling tiling, VkFormatFeatureFlags features);
     VkFormat FindDepthFormat();
     bool     HasStencilComponent(VkFormat format);
@@ -55,7 +58,8 @@ private:
     void     CreateDescriptorPool();
     void     CreateDescriptorSetsRender();
     void     CreateDescriptorSetsShadow();
-    void     RecordCommandBuffer(VkCommandBuffer commandBuffer, uint32_t imageIndex);
+    void     RecordRenderCommandBuffer(VkCommandBuffer commandBuffer, uint32_t imageIndex);
+    void     RecordShadowCommandBuffer(VkCommandBuffer commandBuffer, uint32_t imageIndex);
     void     CreateSyncObjects();
     void     UpdateUniformBuffer(uint32_t currentImage, int modelIndex);
     void     DrawFrame();
@@ -63,9 +67,11 @@ private:
     int m_width;
     int m_height;
 
-    std::vector<VkFramebuffer> m_swapChainFramebuffers;
+    std::vector<VkFramebuffer> m_swapChainRenderFramebuffers;
+    std::vector<VkFramebuffer> m_swapChainShadowFramebuffers;
 
     VkRenderPass            m_renderPass = VK_NULL_HANDLE;
+    VkRenderPass            m_shadowPass = VK_NULL_HANDLE;
     VkDescriptorSetLayout   m_descriptorSetLayoutRender;
     VkDescriptorSetLayout   m_descriptorSetLayoutShadow;
     VkPipelineLayout        m_pipelineLayoutRender;
@@ -73,9 +79,13 @@ private:
     VkPipeline              m_graphicsPipelineRender;
     VkPipeline              m_graphicsPipelineShadow;
 
-    VkImage                 m_depthImage;
-    VkDeviceMemory          m_depthImageMemory;
-    VkImageView             m_depthImageView;
+    VkImage                 m_renderDepthImage;
+    VkDeviceMemory          m_renderDepthImageMemory;
+    VkImageView             m_renderDepthImageView;
+
+    VkImage                 m_shadowDepthImage;
+    VkDeviceMemory          m_shadowDepthImageMemory;
+    VkImageView             m_shadowDepthImageView;
 
     VkImage                 m_textureImage;
     VkDeviceMemory          m_textureImageMemory;
