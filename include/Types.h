@@ -68,7 +68,7 @@ struct ModelPushConstants
     glm::mat4 model;
     glm::mat4 normailzeMatrix;
     VkBool32  isWhite;
-	VkBool32  useTexture;
+    VkBool32  useTexture;
 };
 
 #endif // __TYPES_H__
