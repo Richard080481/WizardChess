@@ -1,6 +1,8 @@
 #ifndef __WIZARD_CHESS_H__
 #define __WIZARD_CHESS_H__
 
+#define DUMP_DEPTH_BUFFER 0
+
 #define GLFW_INCLUDE_VULKAN
 #include <GLFW/glfw3.h>
 
@@ -16,6 +18,9 @@ class WizardChess {
 public:
     WizardChess(int width, int height) : m_width(width), m_height(height) {}
     ~WizardChess();
+
+    static constexpr float RENDER_Z_NEAR = 0.1f;
+    static constexpr float RENDER_Z_FAR  = 20.0f;
 
     void run();
     void SetFramebufferResized()

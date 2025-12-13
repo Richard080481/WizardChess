@@ -68,6 +68,258 @@ enum EShader : unsigned int
     FragShadow = 3,
 };
 
+#if DUMP_DEPTH_BUFFER
+static bool WritePPM_P6_Gray(const char* path, uint32_t w, uint32_t h,
+    const std::vector<uint8_t>& gray)
+{
+    // gray size = w*h, 0..255
+    FILE* f = std::fopen(path, "wb");
+    if (!f) return false;
+
+    std::fprintf(f, "P6\n%u %u\n255\n", w, h);
+
+	// Duplicate gray to RGB
+    for (uint32_t i = 0; i < w * h; ++i) {
+        uint8_t g = gray[i];
+        std::fputc(g, f);
+        std::fputc(g, f);
+        std::fputc(g, f);
+    }
+    std::fclose(f);
+    return true;
+}
+
+static VkCommandBuffer BeginOneTime(VkDevice device, VkCommandPool pool)
+{
+    VkCommandBufferAllocateInfo ai{ VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO };
+    ai.commandPool = pool;
+    ai.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
+    ai.commandBufferCount = 1;
+
+    VkCommandBuffer cmd{};
+    vkAllocateCommandBuffers(device, &ai, &cmd);
+
+    VkCommandBufferBeginInfo bi{ VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO };
+    bi.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
+    vkBeginCommandBuffer(cmd, &bi);
+    return cmd;
+}
+
+static void EndOneTime(VkDevice device, VkQueue q, VkCommandPool pool, VkCommandBuffer cmd)
+{
+    vkEndCommandBuffer(cmd);
+
+    VkSubmitInfo si{ VK_STRUCTURE_TYPE_SUBMIT_INFO };
+    si.commandBufferCount = 1;
+    si.pCommandBuffers = &cmd;
+    vkQueueSubmit(q, 1, &si, VK_NULL_HANDLE);
+    vkQueueWaitIdle(q);
+
+    vkFreeCommandBuffers(device, pool, 1, &cmd);
+}
+
+static VkDeviceSize DepthPixelBytes(VkFormat fmt)
+{
+    switch (fmt) {
+    case VK_FORMAT_D32_SFLOAT: return 4;
+    case VK_FORMAT_D16_UNORM:  return 2;
+    case VK_FORMAT_D24_UNORM_S8_UINT: return 4; // 24+8 packed
+    default: throw std::runtime_error("Unsupported depth format in this snippet");
+    }
+}
+
+struct DepthDumpResult {
+    VkBuffer stagingBuffer{};
+    VkDeviceMemory stagingMem{};
+    VkDeviceSize size{};
+};
+
+static DepthDumpResult CopyDepthImageToStaging(
+    VkDevice            device,
+    VkPhysicalDevice    phys,
+    VkQueue             queue,
+    VkCommandPool       pool,
+    VkImage             depthImage,
+    VkFormat            depthFormat,
+    uint32_t            width,
+    uint32_t            height,
+    VkImageLayout       currentLayout // Current depth image layout (usually DEPTH_STENCIL_ATTACHMENT_OPTIMAL)
+)
+{
+    const VkDeviceSize pixelBytes = DepthPixelBytes(depthFormat);
+    const VkDeviceSize size = VkDeviceSize(width) * VkDeviceSize(height) * pixelBytes;
+
+    // 1) Build a staging buffer
+    VkBufferCreateInfo bci{ VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO };
+    bci.size = size;
+    bci.usage = VK_BUFFER_USAGE_TRANSFER_DST_BIT;
+    bci.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+
+    VkBuffer buf{};
+    vkCreateBuffer(device, &bci, nullptr, &buf);
+
+    VkMemoryRequirements mr{};
+    vkGetBufferMemoryRequirements(device, buf, &mr);
+
+    VkMemoryAllocateInfo mai{ VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO };
+    mai.allocationSize = mr.size;
+    mai.memoryTypeIndex = FindMemoryType(phys, mr.memoryTypeBits,
+        VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
+
+    VkDeviceMemory mem{};
+    vkAllocateMemory(device, &mai, nullptr, &mem);
+    vkBindBufferMemory(device, buf, mem, 0);
+
+    // 2) command: barrier + copy
+    VkCommandBuffer cmd = BeginOneTime(device, pool);
+
+    // 2a) layout transition to TRANSFER_SRC_OPTIMAL
+    VkImageMemoryBarrier2 imb{ VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2 };
+    imb.srcStageMask = VK_PIPELINE_STAGE_2_LATE_FRAGMENT_TESTS_BIT;
+    imb.srcAccessMask = VK_ACCESS_2_MEMORY_WRITE_BIT;
+
+    imb.dstStageMask = VK_PIPELINE_STAGE_2_TRANSFER_BIT;
+    imb.dstAccessMask = VK_ACCESS_2_TRANSFER_READ_BIT;
+
+    imb.oldLayout = currentLayout;
+    imb.newLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
+
+    imb.image = depthImage;
+    imb.subresourceRange.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT; // Only dump depth
+    imb.subresourceRange.baseMipLevel = 0;
+    imb.subresourceRange.levelCount = 1;
+    imb.subresourceRange.baseArrayLayer = 0;
+    imb.subresourceRange.layerCount = 1;
+
+    VkDependencyInfo dep{ VK_STRUCTURE_TYPE_DEPENDENCY_INFO };
+    dep.imageMemoryBarrierCount = 1;
+    dep.pImageMemoryBarriers = &imb;
+
+    vkCmdPipelineBarrier2(cmd, &dep);
+
+    // 2b) copy image -> buffer
+    VkBufferImageCopy bic{};
+    bic.bufferOffset = 0;
+    bic.bufferRowLength = 0;      // 0 means tightly packed
+    bic.bufferImageHeight = 0;
+
+    bic.imageSubresource.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT;
+    bic.imageSubresource.mipLevel = 0;
+    bic.imageSubresource.baseArrayLayer = 0;
+    bic.imageSubresource.layerCount = 1;
+
+    bic.imageOffset = { 0, 0, 0 };
+    bic.imageExtent = { width, height, 1 };
+
+    vkCmdCopyImageToBuffer(cmd, depthImage, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+        buf, 1, &bic);
+
+    // 2c) (Optional) Convert back to the original layout
+    VkImageMemoryBarrier2 imbBack = imb;
+    imbBack.srcStageMask = VK_PIPELINE_STAGE_2_TRANSFER_BIT;
+    imbBack.srcAccessMask = VK_ACCESS_2_TRANSFER_READ_BIT;
+    imbBack.dstStageMask = VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT;
+    imbBack.dstAccessMask = VK_ACCESS_2_MEMORY_READ_BIT | VK_ACCESS_2_MEMORY_WRITE_BIT;
+    imbBack.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
+    imbBack.newLayout = currentLayout;
+
+    VkDependencyInfo depBack{ VK_STRUCTURE_TYPE_DEPENDENCY_INFO };
+    depBack.imageMemoryBarrierCount = 1;
+    depBack.pImageMemoryBarriers = &imbBack;
+    vkCmdPipelineBarrier2(cmd, &depBack);
+
+    EndOneTime(device, queue, pool, cmd);
+
+    return { buf, mem, size };
+}
+
+static std::vector<uint8_t> DepthToGrayCPU(
+    const void* data,
+    VkFormat    fmt,
+    uint32_t    w,
+    uint32_t    h,
+    bool        invert = true)
+{
+    std::vector<uint8_t> out(w * h);
+
+    auto linearizeDepth01 = [](float d, float nearZ, float farZ)
+    {
+        float z = (nearZ * farZ) / (farZ - d * (farZ - nearZ)); // near..far
+        return (z - nearZ) / (farZ - nearZ);                    // 0..1
+    };
+
+    auto clamp01 = [](float x){ return std::max(0.0f, std::min(1.0f, x)); };
+
+    if (fmt == VK_FORMAT_D32_SFLOAT)
+    {
+        auto p = reinterpret_cast<const float*>(data);
+        for (uint32_t i = 0; i < w*h; ++i)
+        {
+            float l = linearizeDepth01(p[i], WizardChess::RENDER_Z_NEAR, WizardChess::RENDER_Z_FAR);
+            float d = clamp01(l);
+            float g = invert ? (1.0f - d) : d;  // near -> far (white to black or black to white)
+            out[i] = (uint8_t)std::lround(g * 255.0f);
+        }
+    }
+    else if (fmt == VK_FORMAT_D16_UNORM)
+    {
+        auto p = reinterpret_cast<const uint16_t*>(data);
+        for (uint32_t i = 0; i < w*h; ++i)
+        {
+            float d = linearizeDepth01(p[i] / 65535.0f, WizardChess::RENDER_Z_NEAR, WizardChess::RENDER_Z_FAR);
+            float g = invert ? (1.0f - d) : d;
+            out[i] = (uint8_t)std::lround(g * 255.0f);
+        }
+    }
+    else if (fmt == VK_FORMAT_D24_UNORM_S8_UINT)
+    {
+        auto p = reinterpret_cast<const uint32_t*>(data);
+        for (uint32_t i = 0; i < w*h; ++i)
+        {
+            uint32_t depth24 = (p[i] & 0x00FFFFFFu);
+            float d = linearizeDepth01(depth24 / float(0x00FFFFFFu), WizardChess::RENDER_Z_NEAR, WizardChess::RENDER_Z_FAR);
+            float g = invert ? (1.0f - d) : d;
+            out[i] = (uint8_t)std::lround(g * 255.0f);
+        }
+    }
+    else
+    {
+        throw std::runtime_error("Unsupported format in DepthToGrayCPU");
+    }
+
+    return out;
+}
+
+void DumpDepthToPPM(
+    VkDevice            device,
+    VkPhysicalDevice    phys,
+    VkQueue             queue,
+    VkCommandPool       pool,
+    VkImage             depthImage,
+    VkFormat            depthFormat,
+    uint32_t            width,
+    uint32_t            height,
+    VkImageLayout       currentLayout,
+    const char*         outPath)
+{
+    auto res = CopyDepthImageToStaging(device, phys, queue, pool,
+                                       depthImage, depthFormat, width, height,
+                                       currentLayout);
+
+    void* mapped = nullptr;
+    vkMapMemory(device, res.stagingMem, 0, res.size, 0, &mapped);
+
+    auto gray = DepthToGrayCPU(mapped, depthFormat, width, height, /*invert=*/true);
+
+    vkUnmapMemory(device, res.stagingMem);
+
+    WritePPM_P6_Gray(outPath, width, height, gray);
+
+    vkDestroyBuffer(device, res.stagingBuffer, nullptr);
+    vkFreeMemory(device, res.stagingMem, nullptr);
+}
+#endif // DUMP_DEPTH_BUFFER
+
 static inline std::string GetModelPaths(enum EModel index)
 {
     static constexpr char* modelFileNames[] =
@@ -402,7 +654,11 @@ void WizardChess::CreateRenderPass()
     depthAttachment.format          = FindDepthFormat();
     depthAttachment.samples         = VK_SAMPLE_COUNT_1_BIT;
     depthAttachment.loadOp          = VK_ATTACHMENT_LOAD_OP_CLEAR;
+#if DUMP_DEPTH_BUFFER
+    depthAttachment.storeOp         = VK_ATTACHMENT_STORE_OP_STORE;
+#else
     depthAttachment.storeOp         = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+#endif // DUMP_DEPTH_BUFFER
     depthAttachment.stencilLoadOp   = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
     depthAttachment.stencilStoreOp  = VK_ATTACHMENT_STORE_OP_DONT_CARE;
     depthAttachment.initialLayout   = VK_IMAGE_LAYOUT_UNDEFINED;
@@ -857,7 +1113,20 @@ void WizardChess::CreateDepthResourcesRender()
     VkFormat depthFormat = FindDepthFormat();
 
     auto extent = VK.SurfaceManager()->SwapChainExtent();
-    CreateImage(extent.width, extent.height, depthFormat, VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, m_renderDepthImage, m_renderDepthImageMemory);
+    CreateImage(
+        extent.width,
+        extent.height,
+        depthFormat,
+        VK_IMAGE_TILING_OPTIMAL,
+        (
+            VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT
+#if DUMP_DEPTH_BUFFER
+            | VK_IMAGE_USAGE_TRANSFER_SRC_BIT
+#endif // DUMP_DEPTH_BUFFER
+        ),
+        VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
+        m_renderDepthImage,
+        m_renderDepthImageMemory);
     m_renderDepthImageView = VK.CreateImageView(m_renderDepthImage, depthFormat, VK_IMAGE_ASPECT_DEPTH_BIT);
 }
 
@@ -893,9 +1162,19 @@ VkFormat WizardChess::FindSupportedFormat(const std::vector<VkFormat>& candidate
 VkFormat WizardChess::FindDepthFormat()
 {
     return FindSupportedFormat(
-        { VK_FORMAT_D32_SFLOAT, VK_FORMAT_D32_SFLOAT_S8_UINT, VK_FORMAT_D24_UNORM_S8_UINT },
+        {
+            VK_FORMAT_D32_SFLOAT,
+            VK_FORMAT_D16_UNORM,
+            VK_FORMAT_D32_SFLOAT_S8_UINT,
+            VK_FORMAT_D24_UNORM_S8_UINT
+        },
         VK_IMAGE_TILING_OPTIMAL,
-        VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT
+        (
+            VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT
+#if DUMP_DEPTH_BUFFER
+            | VK_FORMAT_FEATURE_TRANSFER_SRC_BIT
+#endif // DUMP_DEPTH_BUFFER
+        )
     );
 }
 
@@ -1664,7 +1943,7 @@ void WizardChess::UpdateUniformBuffer(uint32_t currentImage, int modelIndex)
         eye,                          // eye
         glm::vec3(0.0f, -0.5f, 0.0f), // target
         glm::vec3(0.0f, 1.0f, 0.0f)); // up vector
-    uboVsRender.proj = glm::perspective(glm::radians(45.0f), swapChainExtent.width / (float)swapChainExtent.height, 0.1f, 20.0f);
+    uboVsRender.proj = glm::perspective(glm::radians(45.0f), swapChainExtent.width / (float)swapChainExtent.height, RENDER_Z_NEAR, RENDER_Z_FAR);
 
     // Vulkan's y-axis is pointing downwards.
     uboVsRender.proj[1][1] *= -1;
@@ -1774,4 +2053,21 @@ void WizardChess::DrawFrame()
     }
 
     m_currentFrame = (m_currentFrame + 1) % MAX_FRAMES_IN_FLIGHT;
+
+#if DUMP_DEPTH_BUFFER
+    auto extent = VK.SurfaceManager()->SwapChainExtent();
+    DumpDepthToPPM(
+        VK.Device(),
+        VK.PhysicalDevice(),
+        VK.GraphicsQueue(),
+        VK.CommandPool(),
+        m_renderDepthImage,
+        FindDepthFormat(),
+        extent.width,
+        extent.height,
+        VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
+        "depth.ppm");
+
+    exit(0);
+#endif // DUMP_DEPTH_BUFFER
 }
