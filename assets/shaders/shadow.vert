@@ -27,7 +27,8 @@ layout( push_constant ) uniform constants
 
 void main()
 {
-    vec4 position = ubo.view * pushConstant.model * pushConstant.normailzeMatrix * vec4(inPosition, 1.0);
+    mat4 normalizedModelMatrix = pushConstant.model * pushConstant.normailzeMatrix;
+    vec4 position = ubo.view * normalizedModelMatrix * vec4(inPosition, 1.0);
     fragPosition = vec3(position);
     gl_Position = ubo.proj * position;
     fragColor = inColor;

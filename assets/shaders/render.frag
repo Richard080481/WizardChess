@@ -9,6 +9,7 @@ layout(push_constant) uniform PushConstants
 } pc;
 
 layout(binding = 1) uniform sampler2D texSampler;
+layout(binding = 3) uniform sampler2D texSamplerShadow;
 
 layout(binding = 2) uniform UniformBufferObjectFs
 {
@@ -21,6 +22,7 @@ layout(location = 0) in vec3 fragColor;
 layout(location = 1) in vec2 fragTexCoord;
 layout(location = 2) in vec3 fragNormal;
 layout(location = 3) in vec3 fragPosition;
+layout(location = 4) in vec4 lightViewPosition;
 
 layout(location = 0) out vec4 outColor;
 
@@ -62,4 +64,7 @@ void main()
         // Color Mode - Apply lighting to vertex color
         outColor = vec4(lighting * color, 1.0);
     }
+
+    vec3 p = lightViewPosition.xyz / lightViewPosition.w;
+    outColor *= texture(texSamplerShadow, p.xy).r > p.z ? 1.0f : 0.0f;
 }

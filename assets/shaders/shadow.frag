@@ -14,7 +14,6 @@ layout(binding = 2) uniform UniformBufferObjectFs
 {
     vec3 lightPos;
     vec3 lightColor;
-    vec3 cameraPos;
 } ubo;
 
 layout(location = 0) in vec3 fragColor;

@@ -55,6 +55,7 @@ private:
     void     CreateTextureImage();
     void     CreateTextureImageView();
     void     CreateTextureSampler();
+    void     CreateShadowMapSampler();
     void     CreateImage(uint32_t width, uint32_t height, VkFormat format, VkImageTiling tiling, VkImageUsageFlags usage, VkMemoryPropertyFlags properties, VkImage& image, VkDeviceMemory& imageMemory);
     void     TransitionImageLayout(VkImage image, VkFormat format, VkImageLayout oldLayout, VkImageLayout newLayout);
     void     LoadModel();
@@ -97,6 +98,8 @@ private:
     VkDeviceMemory          m_textureImageMemory;
     VkImageView             m_textureImageView;
     VkSampler               m_textureSampler;
+
+    VkSampler               m_shadowMapSampler;
 
     std::vector<Model*>     m_models;
 
