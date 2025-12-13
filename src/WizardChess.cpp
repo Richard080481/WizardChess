@@ -636,6 +636,9 @@ void WizardChess::RecreateSwapChain()
     VK.CreateSwapChain();
     CreateDepthResourcesRender();
     CreateRenderFramebuffer();
+
+    CreateDepthResourcesShadow();
+    CreateShadowFramebuffer();
 }
 
 void WizardChess::CreateRenderPass()
@@ -704,49 +707,34 @@ void WizardChess::CreateRenderPass()
 
 void WizardChess::CreateShadowPass()
 {
-    VkAttachmentDescription colorAttachment{};
-    colorAttachment.format          = VK.SurfaceManager()->SwapChainImageFormat();
-    colorAttachment.samples         = VK_SAMPLE_COUNT_1_BIT;
-    colorAttachment.loadOp          = VK_ATTACHMENT_LOAD_OP_CLEAR;
-    colorAttachment.storeOp         = VK_ATTACHMENT_STORE_OP_STORE;
-    colorAttachment.stencilLoadOp   = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
-    colorAttachment.stencilStoreOp  = VK_ATTACHMENT_STORE_OP_DONT_CARE;
-    colorAttachment.initialLayout   = VK_IMAGE_LAYOUT_UNDEFINED;
-    colorAttachment.finalLayout     = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
-
     VkAttachmentDescription depthAttachment{};
     depthAttachment.format          = FindDepthFormat();
     depthAttachment.samples         = VK_SAMPLE_COUNT_1_BIT;
     depthAttachment.loadOp          = VK_ATTACHMENT_LOAD_OP_CLEAR;
-    depthAttachment.storeOp         = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+	depthAttachment.storeOp         = VK_ATTACHMENT_STORE_OP_STORE; // Must store depth for sampling later
     depthAttachment.stencilLoadOp   = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
     depthAttachment.stencilStoreOp  = VK_ATTACHMENT_STORE_OP_DONT_CARE;
     depthAttachment.initialLayout   = VK_IMAGE_LAYOUT_UNDEFINED;
     depthAttachment.finalLayout     = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
 
-    VkAttachmentReference colorAttachmentRef{};
-    colorAttachmentRef.attachment   = 0;
-    colorAttachmentRef.layout       = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
-
     VkAttachmentReference depthAttachmentRef{};
-    depthAttachmentRef.attachment   = 1;
+    depthAttachmentRef.attachment   = 0;
     depthAttachmentRef.layout       = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
 
     VkSubpassDescription subpass{};
     subpass.pipelineBindPoint       = VK_PIPELINE_BIND_POINT_GRAPHICS;
-    subpass.colorAttachmentCount    = 1;
-    subpass.pColorAttachments       = &colorAttachmentRef;
+    subpass.colorAttachmentCount    = 0;
     subpass.pDepthStencilAttachment = &depthAttachmentRef;
 
     VkSubpassDependency dependency{};
     dependency.srcSubpass           = VK_SUBPASS_EXTERNAL;
     dependency.dstSubpass           = 0;
-    dependency.srcStageMask         = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT | VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT;
+    dependency.srcStageMask         = VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT;
     dependency.srcAccessMask        = 0;
-    dependency.dstStageMask         = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT | VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT;
-    dependency.dstAccessMask        = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT | VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+    dependency.dstStageMask         = VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT;
+    dependency.dstAccessMask        = VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
 
-    std::array<VkAttachmentDescription, 2> attachments = { colorAttachment, depthAttachment };
+    std::array<VkAttachmentDescription, 1> attachments = { depthAttachment };
     VkRenderPassCreateInfo renderPassInfo{};
     renderPassInfo.sType            = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
     renderPassInfo.attachmentCount  = static_cast<uint32_t>(attachments.size());
@@ -1078,25 +1066,22 @@ void WizardChess::CreateRenderFramebuffer()
 
 void WizardChess::CreateShadowFramebuffer()
 {
-    auto swapChainImageViews = VK.SurfaceManager()->SwapChainImageViews();
+    m_swapChainShadowFramebuffers.resize(1);
 
-    m_swapChainShadowFramebuffers.resize(swapChainImageViews.size());
-
-    for (size_t i = 0; i < swapChainImageViews.size(); i++)
+    for (size_t i = 0; i < m_swapChainShadowFramebuffers.size(); i++)
     {
-        std::array<VkImageView, 2> attachments =
+        std::array<VkImageView, 1> attachments =
         {
-            swapChainImageViews[i],
             m_shadowDepthImageView
         };
 
         VkFramebufferCreateInfo framebufferInfo{};
         framebufferInfo.sType           = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
         framebufferInfo.renderPass      = m_shadowPass;
-        framebufferInfo.attachmentCount = static_cast<uint32_t>(attachments.size());
-        framebufferInfo.pAttachments    = attachments.data();
+        framebufferInfo.attachmentCount = 1;
+        framebufferInfo.pAttachments    = &m_shadowDepthImageView;
 
-        auto extent = VK.SurfaceManager()->SwapChainExtent();
+        auto extent = VK.SurfaceManager()->ShadowMapExtent();
         framebufferInfo.width  = extent.width;
         framebufferInfo.height = extent.height;
         framebufferInfo.layers = 1;
@@ -1134,8 +1119,21 @@ void WizardChess::CreateDepthResourcesShadow()
 {
     VkFormat depthFormat = FindDepthFormat();
 
-    auto extent = VK.SurfaceManager()->SwapChainExtent();
-    CreateImage(extent.width, extent.height, depthFormat, VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, m_shadowDepthImage, m_shadowDepthImageMemory);
+    auto extent = VK.SurfaceManager()->ShadowMapExtent();
+    CreateImage(
+        extent.width,
+        extent.height,
+        depthFormat,
+        VK_IMAGE_TILING_OPTIMAL,
+        (
+            VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT
+#if DUMP_DEPTH_BUFFER
+            | VK_IMAGE_USAGE_TRANSFER_SRC_BIT
+#endif // DUMP_DEPTH_BUFFER
+        ),
+        VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
+        m_shadowDepthImage,
+        m_shadowDepthImageMemory);
     m_shadowDepthImageView = VK.CreateImageView(m_shadowDepthImage, depthFormat, VK_IMAGE_ASPECT_DEPTH_BIT);
 }
 
@@ -1596,17 +1594,29 @@ void WizardChess::CreateDescriptorSetsShadow()
     }
 }
 
-void WizardChess::RecordRenderCommandBuffer(VkCommandBuffer commandBuffer, uint32_t imageIndex)
+void WizardChess::RecordCommandBuffer(VkCommandBuffer commandBuffer, uint32_t imageIndex)
 {
     // Begin recording commands into the command buffer.
     VkCommandBufferBeginInfo beginInfo{};
     beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
 
-    if (vkBeginCommandBuffer(commandBuffer, &beginInfo) != VK_SUCCESS)
+    if (vkBeginCommandBuffer(m_commandBuffers[m_currentFrame], &beginInfo) != VK_SUCCESS)
     {
-        throw std::runtime_error("failed to begin recording command buffer!");
+        throw std::runtime_error("failed to begin recording shadow command buffer!");
     }
 
+    RecordShadowCommands(m_commandBuffers[m_currentFrame], imageIndex);
+    RecordRenderCommands(m_commandBuffers[m_currentFrame], imageIndex);
+
+    // Finalize recording the command buffer.
+    if (vkEndCommandBuffer(commandBuffer) != VK_SUCCESS)
+    {
+        throw std::runtime_error("failed to record command buffer!");
+    }
+}
+
+void WizardChess::RecordRenderCommands(VkCommandBuffer commandBuffer, uint32_t imageIndex)
+{
     // Get the current swap chain extent for setting up the render area.
     auto swapChainExtent = VK.SurfaceManager()->SwapChainExtent();
 
@@ -1744,40 +1754,24 @@ void WizardChess::RecordRenderCommandBuffer(VkCommandBuffer commandBuffer, uint3
 
     // End the render pass.
     vkCmdEndRenderPass(commandBuffer);
-
-    // Finalize recording the command buffer.
-    if (vkEndCommandBuffer(commandBuffer) != VK_SUCCESS)
-    {
-        throw std::runtime_error("failed to record command buffer!");
-    }
 }
 
-void WizardChess::RecordShadowCommandBuffer(VkCommandBuffer commandBuffer, uint32_t imageIndex)
+void WizardChess::RecordShadowCommands(VkCommandBuffer commandBuffer, uint32_t imageIndex)
 {
-    // Begin recording commands into the command buffer.
-    VkCommandBufferBeginInfo beginInfo{};
-    beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
-
-    if (vkBeginCommandBuffer(commandBuffer, &beginInfo) != VK_SUCCESS)
-    {
-        throw std::runtime_error("failed to begin recording shadow command buffer!");
-    }
-
     // Get the current swap chain extent for setting up the render area.
-    auto swapChainExtent = VK.SurfaceManager()->SwapChainExtent();
+    auto shadowMapExtent = VK.SurfaceManager()->ShadowMapExtent();
 
     // Configure the render pass begin info.
     VkRenderPassBeginInfo renderPassInfo{};
     renderPassInfo.sType             = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
     renderPassInfo.renderPass        = m_shadowPass; // The render pass to use.
-    renderPassInfo.framebuffer       = m_swapChainShadowFramebuffers[imageIndex]; // Framebuffer for the current swap chain image.
+    renderPassInfo.framebuffer       = m_swapChainShadowFramebuffers[0]; // Framebuffer for the current swap chain image.
     renderPassInfo.renderArea.offset = { 0, 0 }; // Render area starts at the top-left corner.
-    renderPassInfo.renderArea.extent = swapChainExtent; // Render area size matches the swap chain extent.
+    renderPassInfo.renderArea.extent = shadowMapExtent; // Render area size matches the swap chain extent.
 
     // Clear values for the color and depth buffer.
-    std::array<VkClearValue, 2> clearValues{};
-    clearValues[0].color        = { {0.319f, 0.009f, 0.010f, 1.0f} }; // Clear color to a USC Cardinal red in SRGB.
-    clearValues[1].depthStencil = { 1.0f, 0 }; // Clear depth to 1.0 and stencil to 0.
+    std::array<VkClearValue, 1> clearValues{};
+    clearValues[0].depthStencil = { 1.0f, 0 }; // Clear depth to 1.0 and stencil to 0.
 
     renderPassInfo.clearValueCount = static_cast<uint32_t>(clearValues.size());
     renderPassInfo.pClearValues    = clearValues.data();
@@ -1792,8 +1786,8 @@ void WizardChess::RecordShadowCommandBuffer(VkCommandBuffer commandBuffer, uint3
     VkViewport viewport{};
     viewport.x        = 0.0f;
     viewport.y        = 0.0f;
-    viewport.width    = (float)swapChainExtent.width;
-    viewport.height   = (float)swapChainExtent.height;
+    viewport.width    = (float)shadowMapExtent.width;
+    viewport.height   = (float)shadowMapExtent.height;
     viewport.minDepth = 0.0f;
     viewport.maxDepth = 1.0f;
     vkCmdSetViewport(commandBuffer, 0, 1, &viewport);
@@ -1801,7 +1795,7 @@ void WizardChess::RecordShadowCommandBuffer(VkCommandBuffer commandBuffer, uint3
     // Set the scissor rectangle to restrict drawing to the swap chain extent.
     VkRect2D scissor{};
     scissor.offset = { 0, 0 };
-    scissor.extent = swapChainExtent;
+    scissor.extent = shadowMapExtent;
     vkCmdSetScissor(commandBuffer, 0, 1, &scissor);
 
     // Bind the descriptor set for the current frame, providing shader resources like textures and uniform buffers.
@@ -1900,12 +1894,6 @@ void WizardChess::RecordShadowCommandBuffer(VkCommandBuffer commandBuffer, uint3
 
     // End the render pass.
     vkCmdEndRenderPass(commandBuffer);
-
-    // Finalize recording the command buffer.
-    if (vkEndCommandBuffer(commandBuffer) != VK_SUCCESS)
-    {
-        throw std::runtime_error("failed to record command buffer!");
-    }
 }
 
 void WizardChess::CreateSyncObjects()
@@ -1935,6 +1923,7 @@ void WizardChess::CreateSyncObjects()
 void WizardChess::UpdateUniformBuffer(uint32_t currentImage, int modelIndex)
 {
     auto swapChainExtent = VK.SurfaceManager()->SwapChainExtent();
+    constexpr auto lightPos = glm::vec3(-10.0, 10.0, 0.0);
 
     glm::vec3 eye = glm::vec3(0.0f, 8.0f, 10.0f);
 
@@ -1952,18 +1941,19 @@ void WizardChess::UpdateUniformBuffer(uint32_t currentImage, int modelIndex)
 
     UniformBufferObjectFsRender uboFsRender{};
 
-    uboFsRender.lightPos   = glm::vec3(-5.0, 0.0, 0.0);
+    uboFsRender.lightPos   = lightPos;
     uboFsRender.lightColor = glm::vec3( 1.0, 1.0, 1.0);
     uboFsRender.cameraPos  = eye;
 
     memcpy(m_uniformBuffersFsRenderMapped[currentImage], &uboFsRender, sizeof(uboFsRender));
 
+    auto shadowMapExtent = VK.SurfaceManager()->ShadowMapExtent();
     UniformBufferObjectVsShadow uboVsShadow{};
     uboVsShadow.view = glm::lookAt(
-        eye,                          // eye
-        glm::vec3(0.0f, -0.5f, 0.0f), // target
+        lightPos,
+        glm::vec3(0.0f, 0.0f, 0.0f), // target
         glm::vec3(0.0f, 1.0f, 0.0f)); // up vector
-    uboVsShadow.proj = glm::perspective(glm::radians(45.0f), swapChainExtent.width / (float)swapChainExtent.height, 0.1f, 20.0f);
+    uboVsShadow.proj = glm::perspective(glm::radians(45.0f), shadowMapExtent.width / (float)shadowMapExtent.height, 0.1f, 20.0f);
 
     // Vulkan's y-axis is pointing downwards.
     uboVsShadow.proj[1][1] *= -1;
@@ -2003,9 +1993,8 @@ void WizardChess::DrawFrame()
     vkResetFences(VK.Device(), 1, &m_inFlightFences[m_currentFrame]);
 
     vkResetCommandBuffer(m_commandBuffers[m_currentFrame], /*VkCommandBufferResetFlagBits*/ 0);
-    RecordRenderCommandBuffer(m_commandBuffers[m_currentFrame], imageIndex);
-    //RecordShadowCommandBuffer(m_commandBuffers[m_currentFrame], imageIndex);
 
+    RecordCommandBuffer(m_commandBuffers[m_currentFrame], imageIndex);
 
     VkSubmitInfo submitInfo{};
     submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
@@ -2055,7 +2044,20 @@ void WizardChess::DrawFrame()
     m_currentFrame = (m_currentFrame + 1) % MAX_FRAMES_IN_FLIGHT;
 
 #if DUMP_DEPTH_BUFFER
-    auto extent = VK.SurfaceManager()->SwapChainExtent();
+    auto shadowExtent = VK.SurfaceManager()->ShadowMapExtent();
+    DumpDepthToPPM(
+        VK.Device(),
+        VK.PhysicalDevice(),
+        VK.GraphicsQueue(),
+        VK.CommandPool(),
+        m_shadowDepthImage,
+        FindDepthFormat(),
+        shadowExtent.width,
+        shadowExtent.height,
+        VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
+        "depth_shadow.ppm");
+
+    auto renderExtent = VK.SurfaceManager()->SwapChainExtent();
     DumpDepthToPPM(
         VK.Device(),
         VK.PhysicalDevice(),
@@ -2063,10 +2065,10 @@ void WizardChess::DrawFrame()
         VK.CommandPool(),
         m_renderDepthImage,
         FindDepthFormat(),
-        extent.width,
-        extent.height,
+        renderExtent.width,
+        renderExtent.height,
         VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
-        "depth.ppm");
+        "depth_render.ppm");
 
     exit(0);
 #endif // DUMP_DEPTH_BUFFER

@@ -63,8 +63,9 @@ private:
     void     CreateDescriptorPool();
     void     CreateDescriptorSetsRender();
     void     CreateDescriptorSetsShadow();
-    void     RecordRenderCommandBuffer(VkCommandBuffer commandBuffer, uint32_t imageIndex);
-    void     RecordShadowCommandBuffer(VkCommandBuffer commandBuffer, uint32_t imageIndex);
+    void     RecordCommandBuffer(VkCommandBuffer commandBuffer, uint32_t imageIndex);
+    void     RecordRenderCommands(VkCommandBuffer commandBuffer, uint32_t imageIndex);
+    void     RecordShadowCommands(VkCommandBuffer commandBuffer, uint32_t imageIndex);
     void     CreateSyncObjects();
     void     UpdateUniformBuffer(uint32_t currentImage, int modelIndex);
     void     DrawFrame();
