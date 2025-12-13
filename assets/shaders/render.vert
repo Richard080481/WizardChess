@@ -38,10 +38,5 @@ void main()
     fragTexCoord = inTexCoord;
     fragNormal = normalize(mat3(transpose(inverse(ubo.view * pushConstant.model * pushConstant.normailzeMatrix))) * inNormal);
 
-    // Depth bias to reduce shadow acne (self-shadowing artifacts)
-    float bias = -0.001f;
-
     lightViewPosition = ubo.lightProj * ubo.lightView * normalizedModelMatrix * vec4(inPosition, 1.0);
-    lightViewPosition.xy = lightViewPosition.xy * 0.5 + 0.5; // Transform to [0,1] range
-    lightViewPosition.z += bias; // Apply bias to depth
 }
