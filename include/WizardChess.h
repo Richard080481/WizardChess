@@ -55,6 +55,7 @@ private:
     void     CreateTextureImage();
     void     CreateTextureImageView();
     void     CreateTextureSampler();
+	void     CreateShadowMapSampler();
     void     CreateImage(uint32_t width, uint32_t height, VkFormat format, VkImageTiling tiling, VkImageUsageFlags usage, VkMemoryPropertyFlags properties, VkImage& image, VkDeviceMemory& imageMemory);
     void     TransitionImageLayout(VkImage image, VkFormat format, VkImageLayout oldLayout, VkImageLayout newLayout);
     void     LoadModel();
@@ -92,6 +93,7 @@ private:
     VkImage                 m_shadowDepthImage;
     VkDeviceMemory          m_shadowDepthImageMemory;
     VkImageView             m_shadowDepthImageView;
+    VkSampler               m_shadowDepthSampler;
 
     VkImage                 m_textureImage;
     VkDeviceMemory          m_textureImageMemory;

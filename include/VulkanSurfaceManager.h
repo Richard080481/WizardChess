@@ -44,7 +44,7 @@ public:
     VkFormat                        SwapChainImageFormat() const { return m_swapChainImageFormat; }
     const std::vector<VkImageView>& SwapChainImageViews()  const { return m_swapChainImageViews; }
 
-    constexpr VkExtent2D            ShadowMapExtent()      const { return VkExtent2D{ 1024, 1024 }; }
+    constexpr VkExtent2D            ShadowMapExtent()      const { return VkExtent2D{ 2048, 2048 }; }
 
     void GetGlfwFrameBufferSize(int* pWidth, int* pHeight);
 private:

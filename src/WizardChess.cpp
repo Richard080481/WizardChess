@@ -511,6 +511,9 @@ void WizardChess::InitVulkan()
     // Create a sampler for the texture, which defines how the texture is sampled in shaders.
     CreateTextureSampler();
 
+    // Create a sampler for the texture, which defines how the texture is sampled in shaders.
+    CreateShadowMapSampler();
+
     // Load the 3D model data into memory.
     LoadModel();
 
@@ -553,15 +556,6 @@ void WizardChess::CleanupSwapChain()
         vkDestroyFramebuffer(device, framebuffer, nullptr);
     }
 
-    vkDestroyImageView(device, m_shadowDepthImageView, nullptr);
-    vkDestroyImage(device, m_shadowDepthImage, nullptr);
-    vkFreeMemory(device, m_shadowDepthImageMemory, nullptr);
-
-    for (auto framebuffer : m_swapChainShadowFramebuffers)
-    {
-        vkDestroyFramebuffer(device, framebuffer, nullptr);
-    }
-
     auto swapChainImageViews = VK.SurfaceManager()->SwapChainImageViews();
     for (auto imageView : swapChainImageViews)
     {
@@ -600,9 +594,18 @@ void WizardChess::Cleanup()
 
     vkDestroyDescriptorPool(device, m_descriptorPool, nullptr);
 
+    vkDestroySampler(device, m_shadowDepthSampler, nullptr);
+    vkDestroyImageView(device, m_shadowDepthImageView, nullptr);
+    vkDestroyImage(device, m_shadowDepthImage, nullptr);
+    vkFreeMemory(device, m_shadowDepthImageMemory, nullptr);
+
+    for (auto framebuffer : m_swapChainShadowFramebuffers)
+    {
+        vkDestroyFramebuffer(device, framebuffer, nullptr);
+    }
+
     vkDestroySampler(device, m_textureSampler, nullptr);
     vkDestroyImageView(device, m_textureImageView, nullptr);
-
     vkDestroyImage(device, m_textureImage, nullptr);
     vkFreeMemory(device, m_textureImageMemory, nullptr);
 
@@ -636,9 +639,6 @@ void WizardChess::RecreateSwapChain()
     VK.CreateSwapChain();
     CreateDepthResourcesRender();
     CreateRenderFramebuffer();
-
-    CreateDepthResourcesShadow();
-    CreateShadowFramebuffer();
 }
 
 void WizardChess::CreateRenderPass()
@@ -773,7 +773,14 @@ void WizardChess::CreateDescriptorSetLayout()
     uboFsLayoutBindingRender.pImmutableSamplers   = nullptr;
     uboFsLayoutBindingRender.stageFlags           = VK_SHADER_STAGE_FRAGMENT_BIT;
 
-    std::array<VkDescriptorSetLayoutBinding, 3> renderBindings = { uboVsLayoutBindingRender, samplerLayoutBindingRender, uboFsLayoutBindingRender };
+    VkDescriptorSetLayoutBinding shadowMapSamplerLayoutBindingRender{};
+    shadowMapSamplerLayoutBindingRender.binding            = 3;
+    shadowMapSamplerLayoutBindingRender.descriptorCount    = 1;
+    shadowMapSamplerLayoutBindingRender.descriptorType     = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+    shadowMapSamplerLayoutBindingRender.pImmutableSamplers = nullptr;
+    shadowMapSamplerLayoutBindingRender.stageFlags         = VK_SHADER_STAGE_FRAGMENT_BIT;
+
+    std::array<VkDescriptorSetLayoutBinding, 4> renderBindings = { uboVsLayoutBindingRender, samplerLayoutBindingRender, uboFsLayoutBindingRender, shadowMapSamplerLayoutBindingRender };
 
     VkDescriptorSetLayoutCreateInfo layoutInfoRender{};
     layoutInfoRender.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
@@ -1127,6 +1134,7 @@ void WizardChess::CreateDepthResourcesShadow()
         VK_IMAGE_TILING_OPTIMAL,
         (
             VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT
+            | VK_IMAGE_USAGE_SAMPLED_BIT
 #if DUMP_DEPTH_BUFFER
             | VK_IMAGE_USAGE_TRANSFER_SRC_BIT
 #endif // DUMP_DEPTH_BUFFER
@@ -1243,6 +1251,41 @@ void WizardChess::CreateTextureSampler()
     if (vkCreateSampler(VK.Device(), &samplerInfo, nullptr, &m_textureSampler) != VK_SUCCESS)
     {
         throw std::runtime_error("failed to create texture sampler!");
+    }
+}
+
+void WizardChess::CreateShadowMapSampler()
+{
+    VkPhysicalDeviceProperties properties{};
+    vkGetPhysicalDeviceProperties(VK.PhysicalDevice(), &properties);
+
+    VkSamplerCreateInfo samplerInfo{};
+    samplerInfo.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
+
+    samplerInfo.magFilter = VK_FILTER_LINEAR;
+    samplerInfo.minFilter = VK_FILTER_LINEAR;
+
+    samplerInfo.addressModeU = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER;
+    samplerInfo.addressModeV = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER;
+    samplerInfo.addressModeW = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER;
+    samplerInfo.borderColor  = VK_BORDER_COLOR_FLOAT_OPAQUE_WHITE;
+
+    samplerInfo.anisotropyEnable = VK_FALSE;
+    samplerInfo.maxAnisotropy = 1.0f;
+
+    samplerInfo.compareEnable = VK_TRUE;
+    samplerInfo.compareOp     = VK_COMPARE_OP_LESS_OR_EQUAL;
+
+    samplerInfo.mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR;
+    samplerInfo.mipLodBias = 0.0f;
+    samplerInfo.minLod     = 0.0f;
+    samplerInfo.maxLod     = 1.0f;
+
+    samplerInfo.unnormalizedCoordinates = VK_FALSE;
+
+    if (vkCreateSampler(VK.Device(), &samplerInfo, nullptr, &m_shadowDepthSampler) != VK_SUCCESS)
+    {
+        throw std::runtime_error("failed to create shadow map sampler!");
     }
 }
 
@@ -1458,7 +1501,7 @@ void WizardChess::CreateDescriptorPool()
     poolSizes[0].type            = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
     poolSizes[0].descriptorCount = static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT) * 2 * 2; // 2 for vs and fs, another 2 for render and shadow
     poolSizes[1].type            = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-    poolSizes[1].descriptorCount = static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT) * 2;     // 2 for render and shadow
+    poolSizes[1].descriptorCount = static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT) * 2;     // // 1 for chess board, 1 for shadow map
 
     VkDescriptorPoolCreateInfo poolInfo{};
     poolInfo.sType         = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
@@ -1504,7 +1547,12 @@ void WizardChess::CreateDescriptorSetsRender()
         bufferInfoUboFs.offset = 0;
         bufferInfoUboFs.range  = sizeof(UniformBufferObjectFsRender);
 
-        std::array<VkWriteDescriptorSet, 3> descriptorWrites{};
+        VkDescriptorImageInfo shadowImageInfo{};
+        shadowImageInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+        shadowImageInfo.imageView   = m_shadowDepthImageView;
+        shadowImageInfo.sampler     = m_shadowDepthSampler;
+
+        std::array<VkWriteDescriptorSet, 4> descriptorWrites{};
 
         descriptorWrites[0].sType           = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
         descriptorWrites[0].dstSet          = m_descriptorSetsRender[i];
@@ -1529,6 +1577,15 @@ void WizardChess::CreateDescriptorSetsRender()
         descriptorWrites[2].descriptorType  = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
         descriptorWrites[2].descriptorCount = 1;
         descriptorWrites[2].pBufferInfo     = &bufferInfoUboFs;
+
+        descriptorWrites[3].sType           = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+        descriptorWrites[3].dstSet          = m_descriptorSetsRender[i];
+        descriptorWrites[3].dstBinding      = 3;
+        descriptorWrites[3].dstArrayElement = 0;
+        descriptorWrites[3].descriptorType  = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+        descriptorWrites[3].descriptorCount = 1;
+        descriptorWrites[3].pImageInfo      = &shadowImageInfo;
+
         vkUpdateDescriptorSets(VK.Device(), static_cast<uint32_t>(descriptorWrites.size()), descriptorWrites.data(), 0, nullptr);
     }
 }
@@ -1605,7 +1662,34 @@ void WizardChess::RecordCommandBuffer(VkCommandBuffer commandBuffer, uint32_t im
         throw std::runtime_error("failed to begin recording shadow command buffer!");
     }
 
+    VkImageMemoryBarrier shadowBarrier{};
+    shadowBarrier.sType                           = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+    shadowBarrier.pNext                           = nullptr;
+    shadowBarrier.srcAccessMask                   = VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+    shadowBarrier.dstAccessMask                   = VK_ACCESS_SHADER_READ_BIT;
+    shadowBarrier.oldLayout                       = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+    shadowBarrier.newLayout                       = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+    shadowBarrier.srcQueueFamilyIndex             = VK_QUEUE_FAMILY_IGNORED;
+    shadowBarrier.dstQueueFamilyIndex             = VK_QUEUE_FAMILY_IGNORED;
+    shadowBarrier.image                           = m_shadowDepthImage;
+    shadowBarrier.subresourceRange.aspectMask     = VK_IMAGE_ASPECT_DEPTH_BIT;
+    shadowBarrier.subresourceRange.baseMipLevel   = 0;
+    shadowBarrier.subresourceRange.levelCount     = 1;
+    shadowBarrier.subresourceRange.baseArrayLayer = 0;
+    shadowBarrier.subresourceRange.layerCount     = 1;
+
     RecordShadowCommands(m_commandBuffers[m_currentFrame], imageIndex);
+
+    vkCmdPipelineBarrier(
+        commandBuffer,
+        VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT,
+        VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
+        0,
+        0, nullptr,
+        0, nullptr,
+        1, &shadowBarrier
+    );
+
     RecordRenderCommands(m_commandBuffers[m_currentFrame], imageIndex);
 
     // Finalize recording the command buffer.
@@ -1922,38 +2006,24 @@ void WizardChess::CreateSyncObjects()
 
 void WizardChess::UpdateUniformBuffer(uint32_t currentImage, int modelIndex)
 {
-    auto swapChainExtent = VK.SurfaceManager()->SwapChainExtent();
     constexpr auto lightPos = glm::vec3(-10.0, 10.0, 0.0);
-
-    glm::vec3 eye = glm::vec3(0.0f, 8.0f, 10.0f);
-
-    UniformBufferObjectVsRender uboVsRender{};
-    uboVsRender.view = glm::lookAt(
-        eye,                          // eye
-        glm::vec3(0.0f, -0.5f, 0.0f), // target
-        glm::vec3(0.0f, 1.0f, 0.0f)); // up vector
-    uboVsRender.proj = glm::perspective(glm::radians(45.0f), swapChainExtent.width / (float)swapChainExtent.height, RENDER_Z_NEAR, RENDER_Z_FAR);
-
-    // Vulkan's y-axis is pointing downwards.
-    uboVsRender.proj[1][1] *= -1;
-
-    memcpy(m_uniformBuffersVsRenderMapped[currentImage], &uboVsRender, sizeof(uboVsRender));
-
-    UniformBufferObjectFsRender uboFsRender{};
-
-    uboFsRender.lightPos   = lightPos;
-    uboFsRender.lightColor = glm::vec3( 1.0, 1.0, 1.0);
-    uboFsRender.cameraPos  = eye;
-
-    memcpy(m_uniformBuffersFsRenderMapped[currentImage], &uboFsRender, sizeof(uboFsRender));
-
     auto shadowMapExtent = VK.SurfaceManager()->ShadowMapExtent();
     UniformBufferObjectVsShadow uboVsShadow{};
+
+    // Define orthographic projection
+    float orthoSize = 10.0f;
+    float aspectRatio = shadowMapExtent.width / (float)shadowMapExtent.height;
+
+    glm::mat4 orthoProj = glm::ortho(-orthoSize * aspectRatio, orthoSize * aspectRatio,
+        -orthoSize, orthoSize,
+        0.1f, 100.0f);
+
+
     uboVsShadow.view = glm::lookAt(
         lightPos,
         glm::vec3(0.0f, 0.0f, 0.0f), // target
         glm::vec3(0.0f, 1.0f, 0.0f)); // up vector
-    uboVsShadow.proj = glm::perspective(glm::radians(45.0f), shadowMapExtent.width / (float)shadowMapExtent.height, 0.1f, 20.0f);
+    uboVsShadow.proj = orthoProj;
 
     // Vulkan's y-axis is pointing downwards.
     uboVsShadow.proj[1][1] *= -1;
@@ -1964,9 +2034,34 @@ void WizardChess::UpdateUniformBuffer(uint32_t currentImage, int modelIndex)
 
     uboFsShadow.lightPos = glm::vec3(-5.0, 0.0, 0.0);
     uboFsShadow.lightColor = glm::vec3(1.0, 1.0, 1.0);
-    uboFsShadow.cameraPos = eye;
 
     memcpy(m_uniformBuffersFsShadowMapped[currentImage], &uboFsShadow, sizeof(uboFsShadow));
+
+    auto swapChainExtent = VK.SurfaceManager()->SwapChainExtent();
+    glm::vec3 eye = glm::vec3(0.0f, 8.0f, 10.0f);
+    UniformBufferObjectVsRender uboVsRender{};
+    uboVsRender.view = glm::lookAt(
+        eye,                          // eye
+        glm::vec3(0.0f, -0.5f, 0.0f), // target
+        glm::vec3(0.0f, 1.0f, 0.0f)); // up vector
+    uboVsRender.proj = glm::perspective(glm::radians(45.0f), swapChainExtent.width / (float)swapChainExtent.height, RENDER_Z_NEAR, RENDER_Z_FAR);
+
+    // Vulkan's y-axis is pointing downwards.
+    uboVsRender.proj[1][1] *= -1;
+
+    uboVsRender.lightView = uboVsShadow.view;
+    uboVsRender.lightProj = uboVsShadow.proj;
+
+    memcpy(m_uniformBuffersVsRenderMapped[currentImage], &uboVsRender, sizeof(uboVsRender));
+
+    UniformBufferObjectFsRender uboFsRender{};
+
+    uboFsRender.lightPos = lightPos;
+    uboFsRender.lightColor = glm::vec3(1.0, 1.0, 1.0);
+    uboFsRender.cameraPos = eye;
+
+    memcpy(m_uniformBuffersFsRenderMapped[currentImage], &uboFsRender, sizeof(uboFsRender));
+
 }
 
 void WizardChess::DrawFrame()
