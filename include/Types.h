@@ -79,6 +79,14 @@ struct ShadowPushConstants
     VkBool32  useTexture;
 };
 
+struct SelectPushConstants
+{
+    glm::mat4 model;
+    glm::mat4 normailzeMatrix;
+    VkBool32  isWhite;
+    VkBool32  useTexture;
+};
+
 struct UniformBufferObjectVsRender
 {
     alignas(16) glm::mat4 view;
@@ -101,6 +109,21 @@ struct UniformBufferObjectVsShadow
 };
 
 struct UniformBufferObjectFsShadow
+{
+    alignas(16) glm::vec3 lightPos;
+    alignas(16) glm::vec3 lightColor;
+    alignas(16) glm::vec3 cameraPos;
+};
+
+struct UniformBufferObjectVsSelect
+{
+    alignas(16) glm::mat4 view;
+    alignas(16) glm::mat4 proj;
+    alignas(16) glm::mat4 lightView;
+    alignas(16) glm::mat4 lightProj;
+};
+
+struct UniformBufferObjectFsSelect
 {
     alignas(16) glm::vec3 lightPos;
     alignas(16) glm::vec3 lightColor;

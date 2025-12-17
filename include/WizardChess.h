@@ -41,14 +41,17 @@ private:
     void     CleanupSwapChain();
     void     Cleanup();
     void     RecreateSwapChain();
-    void     CreateRenderPass();
     void     CreateShadowPass();
+    void     CreateRenderPass();
+    void     CreateSelectPass();
     void     CreateDescriptorSetLayout();
     void     CreateGraphicsPipelines();
     void     CreateRenderFramebuffer();
     void     CreateShadowFramebuffer();
+    void     CreateSelectFramebuffer();
     void     CreateDepthResourcesRender();
     void     CreateDepthResourcesShadow();
+    void     CreateDepthResourcesSelect();
     VkFormat FindSupportedFormat(const std::vector<VkFormat>& candidates, VkImageTiling tiling, VkFormatFeatureFlags features);
     VkFormat FindDepthFormat();
     bool     HasStencilComponent(VkFormat format);
@@ -61,12 +64,15 @@ private:
     void     LoadModel();
     void     CreateRenderUniformBuffers();
     void     CreateShadowUniformBuffers();
+    void     CreateSelectUniformBuffers();
     void     CreateDescriptorPool();
     void     CreateDescriptorSetsRender();
     void     CreateDescriptorSetsShadow();
+    void     CreateDescriptorSetsSelect();
     void     RecordCommandBuffer(VkCommandBuffer commandBuffer, uint32_t imageIndex);
     void     RecordRenderCommands(VkCommandBuffer commandBuffer, uint32_t imageIndex);
     void     RecordShadowCommands(VkCommandBuffer commandBuffer, uint32_t imageIndex);
+    void     RecordSelectCommands(VkCommandBuffer commandBuffer, uint32_t imageIndex);
     void     CreateSyncObjects();
     void     UpdateUniformBuffer(uint32_t currentImage, int modelIndex);
     void     DrawFrame();
@@ -76,15 +82,20 @@ private:
 
     std::vector<VkFramebuffer> m_swapChainRenderFramebuffers;
     std::vector<VkFramebuffer> m_swapChainShadowFramebuffers;
+    std::vector<VkFramebuffer> m_swapChainSelectFramebuffers;
 
     VkRenderPass            m_renderPass = VK_NULL_HANDLE;
     VkRenderPass            m_shadowPass = VK_NULL_HANDLE;
+    VkRenderPass            m_selectPass = VK_NULL_HANDLE;
     VkDescriptorSetLayout   m_descriptorSetLayoutRender;
     VkDescriptorSetLayout   m_descriptorSetLayoutShadow;
+    VkDescriptorSetLayout   m_descriptorSetLayoutSelect;
     VkPipelineLayout        m_pipelineLayoutRender;
     VkPipelineLayout        m_pipelineLayoutShadow;
+    VkPipelineLayout        m_pipelineLayoutSelect;
     VkPipeline              m_graphicsPipelineRender;
     VkPipeline              m_graphicsPipelineShadow;
+    VkPipeline              m_graphicsPipelineSelect;
 
     VkImage                 m_renderDepthImage;
     VkDeviceMemory          m_renderDepthImageMemory;
@@ -93,6 +104,10 @@ private:
     VkImage                 m_shadowDepthImage;
     VkDeviceMemory          m_shadowDepthImageMemory;
     VkImageView             m_shadowDepthImageView;
+
+    VkImage                 m_selectDepthImage;
+    VkDeviceMemory          m_selectDepthImageMemory;
+    VkImageView             m_selectDepthImageView;
 
     VkImage                 m_textureImage;
     VkDeviceMemory          m_textureImageMemory;
@@ -119,9 +134,18 @@ private:
     std::vector<VkDeviceMemory> m_uniformBuffersFsShadowMemory;
     std::vector<void*>          m_uniformBuffersFsShadowMapped;
 
+    std::vector<VkBuffer>       m_uniformBuffersVsSelect;
+    std::vector<VkDeviceMemory> m_uniformBuffersVsSelectMemory;
+    std::vector<void*>          m_uniformBuffersVsSelectMapped;
+
+    std::vector<VkBuffer>       m_uniformBuffersFsSelect;
+    std::vector<VkDeviceMemory> m_uniformBuffersFsSelectMemory;
+    std::vector<void*>          m_uniformBuffersFsSelectMapped;
+
     VkDescriptorPool             m_descriptorPool;
     std::vector<VkDescriptorSet> m_descriptorSetsRender;
     std::vector<VkDescriptorSet> m_descriptorSetsShadow;
+    std::vector<VkDescriptorSet> m_descriptorSetsSelect;
 
     std::vector<VkCommandBuffer> m_commandBuffers;
 
